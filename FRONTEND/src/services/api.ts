@@ -6,11 +6,33 @@ export interface LR0ParseRequest {
   input: string
 }
 
+export interface ParseStep {
+  step: number
+  stateStack: string
+  symbolStack: string
+  remainingInput: string
+  action: string
+}
+
+export interface ParseTableRow {
+  state: number
+  actions: Record<string, string>
+  gotos: Record<string, number>
+}
+
+export interface ParseTable {
+  headers: string[]
+  rows: ParseTableRow[]
+}
+
 export interface LR0ParseResponse {
   success: boolean
   message: string
-  parseSteps: string[]
-  productions: Record<string, string[]>
+  isAccepted: boolean
+  parseSteps: ParseStep[]
+  parseTable: ParseTable
+  svgDiagram: string
+  productions: Record<string, string[][]>
 }
 
 export interface RegexBuildRequest {

@@ -7,8 +7,40 @@
 #include <ctime>
 #include <chrono>
 #include <thread>
+#include <cstdlib>
 
 namespace APIHandlers {
+    
+    // DOT转SVG的辅助函数
+    std::string generateSVGFromDot(const std::string& dotContent) {
+        // 创建临时DOT文件
+        std::string tempDotFile = "/tmp/lr0_temp.dot";
+        std::string tempSvgFile = "/tmp/lr0_temp.svg";
+        
+        // 写入DOT内容
+        std::ofstream dotFile(tempDotFile);
+        dotFile << dotContent;
+        dotFile.close();
+        
+        // 使用dot命令生成SVG
+        std::string command = "dot -Tsvg " + tempDotFile + " -o " + tempSvgFile;
+        int result = system(command.c_str());
+        
+        if (result == 0) {
+            // 读取生成的SVG内容
+            std::ifstream svgFile(tempSvgFile);
+            std::string svgContent((std::istreambuf_iterator<char>(svgFile)),
+                                   std::istreambuf_iterator<char>());
+            
+            // 清理临时文件
+            std::remove(tempDotFile.c_str());
+            std::remove(tempSvgFile.c_str());
+            
+            return svgContent;
+        } else {
+            return ""; // DOT命令执行失败
+        }
+    }
     
     // 健康检查端点
     crow::response handleHealthCheck(const crow::request& req) {
@@ -44,11 +76,99 @@ namespace APIHandlers {
                 return crow::response(400, error);
             }
             
-            // 暂时返回模拟响应
+            // 获取请求参数
+            std::string grammar = jsonBody["grammar"].s();
+            std::string input = jsonBody["input"].s();
+            
+            if (grammar.empty()) {
+                crow::json::wvalue error;
+                error["error"] = "Grammar is required";
+                return crow::response(400, error);
+            }
+            
+            if (input.empty()) {
+                crow::json::wvalue error;
+                error["error"] = "Input string is required";
+                return crow::response(400, error);
+            }
+            
+            // 读取语法
+            LR0Parser::readGrammarFromString(grammar);
+            
+            // 执行LR0解析
+            auto result = LR0Parser::parseInput(input);
+            
+            // 构建响应
             crow::json::wvalue response;
-            response["success"] = true;
-            response["message"] = "LR0 parsing endpoint (demo mode)";
-            response["note"] = "Full implementation coming soon";
+            response["success"] = result.success;
+            response["message"] = result.message;
+            response["isAccepted"] = result.isAccepted;
+            
+            // 解析步骤
+            crow::json::wvalue parseSteps(crow::json::type::List);
+            for (size_t i = 0; i < result.parseSteps.size(); ++i) {
+                const auto& step = result.parseSteps[i];
+                crow::json::wvalue stepJson;
+                stepJson["step"] = step.step;
+                stepJson["stateStack"] = step.stateStack;
+                stepJson["symbolStack"] = step.symbolStack;
+                stepJson["remainingInput"] = step.remainingInput;
+                stepJson["action"] = step.action;
+                parseSteps[i] = std::move(stepJson);
+            }
+            response["parseSteps"] = std::move(parseSteps);
+            
+            // 分析表
+            crow::json::wvalue parseTable;
+            crow::json::wvalue headers(crow::json::type::List);
+            for (size_t i = 0; i < result.parseTable.headers.size(); ++i) {
+                headers[i] = result.parseTable.headers[i];
+            }
+            parseTable["headers"] = std::move(headers);
+            
+            crow::json::wvalue rows(crow::json::type::List);
+            for (size_t i = 0; i < result.parseTable.rows.size(); ++i) {
+                const auto& row = result.parseTable.rows[i];
+                crow::json::wvalue rowJson;
+                rowJson["state"] = row.state;
+                
+                // Actions
+                crow::json::wvalue actions;
+                for (const auto& action : row.actions) {
+                    actions[action.first] = action.second;
+                }
+                rowJson["actions"] = std::move(actions);
+                
+                // Gotos
+                crow::json::wvalue gotos;
+                for (const auto& gotoItem : row.gotos) {
+                    gotos[gotoItem.first] = gotoItem.second;
+                }
+                rowJson["gotos"] = std::move(gotos);
+                
+                rows[i] = std::move(rowJson);
+            }
+            parseTable["rows"] = std::move(rows);
+            response["parseTable"] = std::move(parseTable);
+            
+            // 生成SVG图表
+            if (!result.dotFile.empty()) {
+                std::string svgContent = generateSVGFromDot(result.dotFile);
+                response["svgDiagram"] = svgContent;
+            } else {
+                response["svgDiagram"] = "";
+            }
+            
+            // 产生式
+            crow::json::wvalue productions;
+            for (const auto& prod : result.productions) {
+                crow::json::wvalue rightSides(crow::json::type::List);
+                for (size_t i = 0; i < prod.second.size(); ++i) {
+                    rightSides[i] = prod.second[i];
+                }
+                productions[prod.first] = std::move(rightSides);
+            }
+            response["productions"] = std::move(productions);
             
             auto endTime = std::chrono::steady_clock::now();
             auto totalDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);

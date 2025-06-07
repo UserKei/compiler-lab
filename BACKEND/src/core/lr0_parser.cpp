@@ -40,7 +40,7 @@ namespace Grammar {
         for (size_t i = 0; i < rhs.size(); ++i) {
             char currentChar = rhs[i];
 
-            // 跳过空格
+            // 跳过空格 - 空格作为符号分隔符
             if (std::isspace(currentChar)) {
                 if (!currentSymbol.empty()) {
                     symbols.push_back(currentSymbol);
@@ -49,25 +49,27 @@ namespace Grammar {
                 continue;
             }
 
-            // 处理非终结符（大写字母）
+            // 处理大写字母 - 每个大写字母是一个独立的非终结符
             if (std::isupper(currentChar)) {
+                // 先保存之前累积的符号
                 if (!currentSymbol.empty()) {
                     symbols.push_back(currentSymbol);
                     currentSymbol.clear();
                 }
+                // 大写字母作为单独的符号
                 symbols.push_back(std::string(1, currentChar));
             }
-            // 处理操作符和其他单字符终结符 std::isalnum a-z A-Z 0-9 true
-            else if (!std::isalnum(currentChar)) {
-                if (!currentSymbol.empty()) {
-                    symbols.push_back(currentSymbol);
-                    currentSymbol.clear();
-                }
-                symbols.push_back(std::string(1, currentChar));
-            }
-            // 处理字母数字字符（包括标识符）
-            else {
+            // 处理小写字母和数字 - 可以组合成终结符
+            else if (std::islower(currentChar) || std::isdigit(currentChar)) {
                 currentSymbol += currentChar;
+            }
+            // 处理特殊字符和操作符
+            else {
+                if (!currentSymbol.empty()) {
+                    symbols.push_back(currentSymbol);
+                    currentSymbol.clear();
+                }
+                symbols.push_back(std::string(1, currentChar));
             }
         }
 
@@ -132,10 +134,11 @@ namespace Grammar {
             return false;
         }
 
-        // 如果没有S产生式，添加一个S -> startSymbol的产生式
-        if (!hasStartSymbolS && !startSymbol.empty()) {
-            rawProductionRules.insert(rawProductionRules.begin(), { "S", startSymbol });
-            std::cout << "Added augmented start production: S -> " << startSymbol << std::endl;
+        // 总是添加拓广文法的开始符号
+        if (!startSymbol.empty()) {
+            std::string augmentedStartSymbol = startSymbol + "'";  // 例如：S -> S'
+            rawProductionRules.insert(rawProductionRules.begin(), { augmentedStartSymbol, startSymbol });
+            std::cout << "Added augmented start production: " << augmentedStartSymbol << " -> " << startSymbol << std::endl;
         }
 
         // 清空原有数据，重新构建
@@ -150,7 +153,17 @@ namespace Grammar {
         // 处理每个产生式
         for (const auto& productionPair : rawProductionRules) {
             nonterminalSet.insert(productionPair.first);
-            std::stringstream stringStream(productionPair.second);
+            
+            // 支持半角和全角竖线分隔符
+            std::string rightSide = productionPair.second;
+            // 替换全角竖线为半角竖线
+            size_t pos = 0;
+            while ((pos = rightSide.find("｜", pos)) != std::string::npos) {
+                rightSide.replace(pos, 3, "|");  // 全角竖线是3字节UTF-8
+                pos += 1;
+            }
+            
+            std::stringstream stringStream(rightSide);
             std::string alternativeRule;
 
             // 处理每个可选项（用|分隔）
@@ -238,8 +251,10 @@ namespace Grammar {
             throw std::runtime_error("No valid production rules found in grammar");
         }
 
-        if (!hasStartSymbolS && !startSymbol.empty()) {
-            rawProductionRules.insert(rawProductionRules.begin(), { "S", startSymbol });
+        // 总是添加拓广文法的开始符号
+        if (!startSymbol.empty()) {
+            std::string augmentedStartSymbol = startSymbol + "'";  // 例如：S -> S'
+            rawProductionRules.insert(rawProductionRules.begin(), { augmentedStartSymbol, startSymbol });
         }
 
         // 清空原有数据，重新构建
@@ -253,7 +268,17 @@ namespace Grammar {
 
         for (const auto& productionPair : rawProductionRules) {
             nonterminalSet.insert(productionPair.first);
-            std::stringstream stringStream(productionPair.second);
+            
+            // 支持半角和全角竖线分隔符
+            std::string rightSide = productionPair.second;
+            // 替换全角竖线为半角竖线
+            size_t pos = 0;
+            while ((pos = rightSide.find("｜", pos)) != std::string::npos) {
+                rightSide.replace(pos, 3, "|");  // 全角竖线是3字节UTF-8
+                pos += 1;
+            }
+            
+            std::stringstream stringStream(rightSide);
             std::string alternativeRule;
 
             while (std::getline(stringStream, alternativeRule, '|')) {
@@ -683,8 +708,30 @@ namespace LR0Analyzer {
     // 构建所有LR(0)项目集
     std::vector<std::vector<ItemSet::LRItem>> buildAllItemSets() {
         std::vector<std::vector<ItemSet::LRItem>> canonicalCollection;
+        
+        // 构建初始项目集I0 - 包含拓广开始符号的产生式
+        std::vector<ItemSet::LRItem> initialItems;
+        
+        // 寻找拓广开始符号（以'结尾的符号）或S符号
+        int startProductionIndex = -1;
+        for (size_t i = 0; i < Grammar::productionLeftSides.size(); i++) {
+            const std::string& leftSide = Grammar::productionLeftSides[i];
+            if (leftSide == "S" || (leftSide.length() > 1 && leftSide.back() == '\'')) {
+                startProductionIndex = static_cast<int>(i);
+                break;
+            }
+        }
+        
+        // 如果找到了拓广开始符号，用它构建初始项目集
+        if (startProductionIndex != -1) {
+            initialItems.push_back(ItemSet::LRItem(startProductionIndex, 0));
+        } else if (!Grammar::productionLeftSides.empty()) {
+            // 如果没有找到，使用第一个产生式
+            initialItems.push_back(ItemSet::LRItem(0, 0));
+        }
+        
         // 添加初始项目集I0
-        canonicalCollection.push_back(ItemSet::computeClosure({ ItemSet::LRItem(0, 0) }));
+        canonicalCollection.push_back(ItemSet::computeClosure(initialItems));
 
         // 为每个项目集计算GOTO函数，直到没有新的项目集产生
         for (size_t itemSetIndex = 0; itemSetIndex < canonicalCollection.size(); itemSetIndex++) {
@@ -791,9 +838,11 @@ namespace LR0Analyzer {
                 }
                 else {
                     // 点在最后，归约或接受操作
-                    if (Grammar::productionLeftSides[productionIndex] == "S") {
+                    const std::string& leftSide = Grammar::productionLeftSides[productionIndex];
+                    // 检查是否是拓广开始符号（以'结尾）或者是S
+                    if (leftSide == "S" || (leftSide.length() > 1 && leftSide.back() == '\'')) {
                         actionTable[stateIndex]["#"] = "acc";
-                        std::cout << "    Accept action" << std::endl;
+                        std::cout << "    Accept action for " << leftSide << std::endl;
                     }
                     else {
                         std::cout << "    Reduce by production " << productionIndex << ": " << Grammar::productionLeftSides[productionIndex] << " -> ";
@@ -899,33 +948,39 @@ namespace LR0Analyzer {
             for (const std::string& terminal : Grammar::terminalSymbols) {
                 if (terminal == "#") continue;  // 跳过结束符
 
-                std::string action = actionTable[stateIndex].at(terminal);
-                if (!action.empty() && action[0] == 's') {
-                    int targetState = std::stoi(action.substr(1));
-                    dotFile << "    I" << stateIndex << " -> I" << targetState
-                        << " [label=\"" << terminal << "\"];" << std::endl;
+                auto actionIter = actionTable[stateIndex].find(terminal);
+                if (actionIter != actionTable[stateIndex].end()) {
+                    std::string action = actionIter->second;
+                    if (!action.empty() && action[0] == 's') {
+                        int targetState = std::stoi(action.substr(1));
+                        dotFile << "    I" << stateIndex << " -> I" << targetState
+                            << " [label=\"" << terminal << "\"];" << std::endl;
+                    }
                 }
             }
 
             // 处理非终结符转换（GOTO）
             for (const std::string& nonterminal : Grammar::nonterminalSymbols) {
-                int targetState = gotoTable[stateIndex].at(nonterminal);
-                if (targetState != -1) {
-                    dotFile << "    I" << stateIndex << " -> I" << targetState
-                        << " [label=\"" << nonterminal << "\", style=dashed];" << std::endl;
+                auto gotoIter = gotoTable[stateIndex].find(nonterminal);
+                if (gotoIter != gotoTable[stateIndex].end()) {
+                    int targetState = gotoIter->second;
+                    if (targetState != -1) {
+                        dotFile << "    I" << stateIndex << " -> I" << targetState
+                            << " [label=\"" << nonterminal << "\", style=dashed];" << std::endl;
+                    }
                 }
             }
         }
 
         // 标记接受状态
         for (int stateIndex = 0; stateIndex < actionTable.size(); stateIndex++) {
-            if (actionTable[stateIndex].at("#") == "acc") {
-                dotFile << "    I" << stateIndex << " [style=\"rounded,filled\", fillcolor=lightgreen];" << std::endl;
+            for (const auto& pair : actionTable[stateIndex]) {
+                if (pair.second == "acc") {
+                    dotFile << "    I" << stateIndex << " [style=\"filled,rounded\", fillcolor=lightgreen];" << std::endl;
+                    break;
+                }
             }
         }
-
-        // 标记初始状态
-        dotFile << "    I0 [style=\"rounded,filled\", fillcolor=lightblue];" << std::endl;
 
         dotFile << "}" << std::endl;
         dotFile.close();
@@ -944,6 +999,78 @@ namespace LR0Analyzer {
 
 // LR0Parser 命名空间 - 提供对外API接口
 namespace LR0Parser {
+    // 生成DOT文件内容的辅助函数
+    std::string generateDotFileContent(const std::vector<std::vector<ItemSet::LRItem>>& canonicalCollection,
+                                     const std::vector<std::map<std::string, std::string>>& actionTable,
+                                     const std::vector<std::map<std::string, int>>& gotoTable) {
+        std::stringstream dot;
+        
+        dot << "digraph LR0_DFA {" << std::endl;
+        dot << "    rankdir=LR;" << std::endl;
+        dot << "    node [shape=box, style=rounded];" << std::endl;
+        dot << std::endl;
+
+        // 为每个状态生成节点
+        for (int stateIndex = 0; stateIndex < canonicalCollection.size(); stateIndex++) {
+            dot << "    I" << stateIndex << " [label=\"I" << stateIndex << "\\n";
+
+            // 添加项目集内容
+            for (const auto& item : canonicalCollection[stateIndex]) {
+                dot << item.getItemString() << "\\n";
+            }
+            dot << "\"];" << std::endl;
+        }
+
+        dot << std::endl;
+
+        // 生成状态转换边
+        for (int stateIndex = 0; stateIndex < canonicalCollection.size(); stateIndex++) {
+            // 处理终结符转换（shift 动作）
+            for (const std::string& terminal : Grammar::terminalSymbols) {
+                if (terminal == "#") continue;  // 跳过结束符
+
+                auto actionIter = actionTable[stateIndex].find(terminal);
+                if (actionIter != actionTable[stateIndex].end()) {
+                    std::string action = actionIter->second;
+                    if (!action.empty() && action[0] == 's') {
+                        int targetState = std::stoi(action.substr(1));
+                        dot << "    I" << stateIndex << " -> I" << targetState
+                            << " [label=\"" << terminal << "\"];" << std::endl;
+                    }
+                }
+            }
+
+            // 处理非终结符转换（GOTO）
+            for (const std::string& nonterminal : Grammar::nonterminalSymbols) {
+                auto gotoIter = gotoTable[stateIndex].find(nonterminal);
+                if (gotoIter != gotoTable[stateIndex].end()) {
+                    int targetState = gotoIter->second;
+                    if (targetState != -1) {
+                        dot << "    I" << stateIndex << " -> I" << targetState
+                            << " [label=\"" << nonterminal << "\", style=dashed];" << std::endl;
+                    }
+                }
+            }
+        }
+
+        // 标记接受状态
+        for (int stateIndex = 0; stateIndex < actionTable.size(); stateIndex++) {
+            for (const auto& pair : actionTable[stateIndex]) {
+                if (pair.second == "acc") {
+                    dot << "    I" << stateIndex << " [style=\"filled,rounded\", fillcolor=lightgreen];" << std::endl;
+                    break;
+                }
+            }
+        }
+
+        // 标记初始状态I0
+        dot << "    I0 [style=\"rounded,filled\", fillcolor=lightblue];" << std::endl;
+
+        dot << "}" << std::endl;
+        
+        return dot.str();
+    }
+
     void readGrammarFromString(const std::string& grammarContent) {
         Grammar::readGrammarFromString(grammarContent);
     }
@@ -962,15 +1089,197 @@ namespace LR0Parser {
     
     ParseResult parseInput(const std::string& input) {
         ParseResult result;
-        result.success = false;
-        result.message = "LR0 parsing not fully implemented yet";
         
-        // 获取产生式信息
-        auto leftSides = Grammar::getProductionLeftSides();
-        auto rightSides = Grammar::getProductionRightSides();
-        
-        for (size_t i = 0; i < leftSides.size() && i < rightSides.size(); ++i) {
-            result.productions[leftSides[i]] = rightSides[i];
+        try {
+            // 1. 构建LR(0)项目集
+            std::vector<std::vector<ItemSet::LRItem>> canonicalCollection = LR0Analyzer::buildAllItemSets();
+            int numberOfStates = canonicalCollection.size();
+            
+            // 2. 初始化分析表
+            std::vector<std::map<std::string, std::string>> actionTable;
+            std::vector<std::map<std::string, int>> gotoTable;
+            LR0Analyzer::initializeParseTables(actionTable, gotoTable, numberOfStates);
+            
+            // 3. 构建分析表
+            LR0Analyzer::buildParseTables(canonicalCollection, actionTable, gotoTable);
+            
+            // 4. 准备输入字符串
+            std::string processedInput = input;
+            if (!processedInput.empty() && processedInput.back() != '#') {
+                processedInput.push_back('#');
+            }
+            
+            // 5. 执行解析过程
+            std::vector<int> stateStack;
+            std::vector<std::string> symbolStack;
+            stateStack.push_back(0);
+            int inputPosition = 0;
+            int stepNumber = 1;
+            bool isAccepted = false;
+            
+            // 存储解析步骤
+            std::vector<ParseStep> parseSteps;
+            
+            while (true) {
+                int currentState = stateStack.back();
+                std::string currentSymbol(1, processedInput[inputPosition]);
+                
+                // 构建状态栈和符号栈字符串
+                std::string stateStackString, symbolStackString;
+                for (int state : stateStack) {
+                    stateStackString += std::to_string(state) + " ";
+                }
+                for (const auto& symbol : symbolStack) {
+                    symbolStackString += symbol + " ";
+                }
+                
+                ParseStep step;
+                step.step = stepNumber;
+                step.stateStack = stateStackString;
+                step.symbolStack = symbolStackString;
+                step.remainingInput = processedInput.substr(inputPosition);
+                
+                // 检查终结符是否合法
+                if (std::find(Grammar::terminalSymbols.begin(), Grammar::terminalSymbols.end(), currentSymbol) == Grammar::terminalSymbols.end()) {
+                    step.action = "error (invalid symbol)";
+                    parseSteps.push_back(step);
+                    result.isAccepted = false;
+                    break;
+                }
+                
+                auto actionIter = actionTable[currentState].find(currentSymbol);
+                if (actionIter == actionTable[currentState].end() || actionIter->second.empty()) {
+                    step.action = "error (no action)";
+                    parseSteps.push_back(step);
+                    result.isAccepted = false;
+                    break;
+                }
+                
+                std::string actionValue = actionIter->second;
+                
+                if (actionValue[0] == 's') {  // Shift action
+                    int nextState = std::stoi(actionValue.substr(1));
+                    step.action = "shift " + std::to_string(nextState);
+                    parseSteps.push_back(step);
+                    
+                    stateStack.push_back(nextState);
+                    symbolStack.push_back(currentSymbol);
+                    inputPosition++;
+                    
+                } else if (actionValue[0] == 'r') {  // Reduce action
+                    int productionIndex = std::stoi(actionValue.substr(1));
+                    step.action = "reduce " + std::to_string(productionIndex);
+                    parseSteps.push_back(step);
+                    
+                    // 获取产生式
+                    std::string leftSide = Grammar::productionLeftSides[productionIndex];
+                    std::vector<std::string> rightSide = Grammar::productionRightSides[productionIndex];
+                    
+                    // 弹出栈
+                    for (int i = 0; i < rightSide.size(); i++) {
+                        if (!stateStack.empty()) stateStack.pop_back();
+                        if (!symbolStack.empty()) symbolStack.pop_back();
+                    }
+                    
+                    // GOTO操作
+                    if (!stateStack.empty()) {
+                        int currentState = stateStack.back();
+                        int gotoState = gotoTable[currentState][leftSide];
+                        if (gotoState != -1) {
+                            stateStack.push_back(gotoState);
+                            symbolStack.push_back(leftSide);
+                        }
+                    }
+                    
+                } else if (actionValue == "acc") {  // Accept
+                    step.action = "accept";
+                    parseSteps.push_back(step);
+                    result.isAccepted = true;
+                    isAccepted = true;
+                    break;
+                } else {
+                    step.action = "error (unknown action)";
+                    parseSteps.push_back(step);
+                    result.isAccepted = false;
+                    break;
+                }
+                
+                stepNumber++;
+            }
+            
+            // 6. 构建分析表结构
+            result.parseTable.headers.clear();
+            result.parseTable.headers.push_back("State");
+            
+            // 添加终结符列
+            for (const std::string& terminal : Grammar::terminalSymbols) {
+                result.parseTable.headers.push_back(terminal);
+            }
+            
+            // 添加非终结符列（排除拓广开始符号）
+            for (const std::string& nonterminal : Grammar::nonterminalSymbols) {
+                // 排除拓广开始符号（以'结尾的符号）
+                if (nonterminal.length() > 0 && nonterminal.back() != '\'') {
+                    result.parseTable.headers.push_back(nonterminal);
+                }
+            }
+            
+            // 填充分析表行
+            for (int i = 0; i < numberOfStates; i++) {
+                ParseTableRow row;
+                row.state = i;
+                
+                // 填充ACTION部分
+                for (const std::string& terminal : Grammar::terminalSymbols) {
+                    auto it = actionTable[i].find(terminal);
+                    if (it != actionTable[i].end() && !it->second.empty()) {
+                        row.actions[terminal] = it->second;
+                    } else {
+                        row.actions[terminal] = "";
+                    }
+                }
+                
+                // 填充GOTO部分（排除拓广开始符号）
+                for (const std::string& nonterminal : Grammar::nonterminalSymbols) {
+                    // 排除拓广开始符号（以'结尾的符号）
+                    if (nonterminal.length() > 0 && nonterminal.back() != '\'') {
+                        auto it = gotoTable[i].find(nonterminal);
+                        if (it != gotoTable[i].end() && it->second != -1) {
+                            row.gotos[nonterminal] = it->second;
+                        }
+                    }
+                }
+                
+                result.parseTable.rows.push_back(row);
+            }
+            
+            // 7. 生成DOT文件内容
+            result.dotFile = generateDotFileContent(canonicalCollection, actionTable, gotoTable);
+            
+            // 8. 设置结果
+            result.parseSteps = parseSteps;
+            result.success = true;
+            result.message = isAccepted ? "Input accepted" : "Input rejected";
+            
+            // 获取产生式信息 - 聚合同一左部的所有右部
+            auto leftSides = Grammar::getProductionLeftSides();
+            auto rightSides = Grammar::getProductionRightSides();
+            
+            for (size_t i = 0; i < leftSides.size() && i < rightSides.size(); ++i) {
+                const std::string& leftSide = leftSides[i];
+                const std::vector<std::string>& rightSide = rightSides[i];
+                
+                // 如果这个左部已经存在，添加到现有列表中；否则创建新列表
+                if (result.productions.find(leftSide) == result.productions.end()) {
+                    result.productions[leftSide] = std::vector<std::vector<std::string>>();
+                }
+                result.productions[leftSide].push_back(rightSide);
+            }
+            
+        } catch (const std::exception& e) {
+            result.success = false;
+            result.message = "Error during parsing: " + std::string(e.what());
+            result.isAccepted = false;
         }
         
         return result;
@@ -983,6 +1292,28 @@ namespace LR0Parser {
     void printAutomaton() {
         // 自动机打印功能待实现
         std::cout << "Automaton printing not yet implemented" << std::endl;
+    }
+    
+    std::string generateDotFile() {
+        try {
+            // 1. 构建LR(0)项目集
+            std::vector<std::vector<ItemSet::LRItem>> canonicalCollection = LR0Analyzer::buildAllItemSets();
+            int numberOfStates = canonicalCollection.size();
+            
+            // 2. 初始化分析表
+            std::vector<std::map<std::string, std::string>> actionTable;
+            std::vector<std::map<std::string, int>> gotoTable;
+            LR0Analyzer::initializeParseTables(actionTable, gotoTable, numberOfStates);
+            
+            // 3. 构建分析表
+            LR0Analyzer::buildParseTables(canonicalCollection, actionTable, gotoTable);
+            
+            // 4. 生成DOT内容
+            return generateDotFileContent(canonicalCollection, actionTable, gotoTable);
+            
+        } catch (const std::exception& e) {
+            return "// Error generating DOT file: " + std::string(e.what());
+        }
     }
 }
 
