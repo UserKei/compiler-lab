@@ -133,24 +133,88 @@
             </div>
 
             <!-- 匹配结果 -->
-            <div v-if="store.regexResult.matchResult !== undefined" class="match-result">
+            <div v-if="hasPerformedMatch && store.regexResult.matchResult !== undefined" class="match-result">
               <div :class="['match-indicator', store.regexResult.matchResult ? 'matched' : 'not-matched']">
                 {{ store.regexResult.matchResult ? '✅ 字符串匹配成功' : '❌ 字符串不匹配' }}
               </div>
             </div>
 
-            <!-- 自动机描述 -->
+            <!-- 自动机描述和可视化 -->
             <div class="automata-section">
-              <!-- NFA描述 -->
-              <div v-if="store.regexResult.nfaDescription" class="automata-item">
-                <h4>NFA (非确定有限自动机)</h4>
-                <pre class="automata-description">{{ store.regexResult.nfaDescription }}</pre>
+              <!-- 结果标签页 -->
+              <div class="result-tabs">
+                <button
+                  @click="resultTab = 'description'"
+                  :class="['tab', { active: resultTab === 'description' }]"
+                >
+                  文字描述
+                </button>
+                <button
+                  @click="resultTab = 'visualization'"
+                  :class="['tab', { active: resultTab === 'visualization' }]"
+                  v-if="hasVisualization"
+                >
+                  图形化显示
+                </button>
               </div>
 
-              <!-- DFA描述 -->
-              <div v-if="store.regexResult.dfaDescription" class="automata-item">
-                <h4>DFA (确定有限自动机)</h4>
-                <pre class="automata-description">{{ store.regexResult.dfaDescription }}</pre>
+              <!-- 文字描述标签页 -->
+              <div v-if="resultTab === 'description'" class="tab-content">
+                <!-- NFA描述 -->
+                <div v-if="store.regexResult.nfaDescription" class="automata-item">
+                  <h4>NFA (非确定有限自动机)</h4>
+                  <pre class="automata-description">{{ store.regexResult.nfaDescription }}</pre>
+                </div>
+
+                <!-- DFA描述 -->
+                <div v-if="store.regexResult.dfaDescription" class="automata-item">
+                  <h4>DFA (确定有限自动机)</h4>
+                  <pre class="automata-description">{{ store.regexResult.dfaDescription }}</pre>
+                </div>
+              </div>
+
+              <!-- 可视化标签页 -->
+              <div v-if="resultTab === 'visualization'" class="tab-content">
+                <!-- 可视化子标签页 -->
+                <div class="visualization-tabs">
+                  <button
+                    @click="vizTab = 'nfa'"
+                    :class="['viz-tab', { active: vizTab === 'nfa' }]"
+                    v-if="store.regexResult.nfaSvg"
+                  >
+                    NFA
+                  </button>
+                  <button
+                    @click="vizTab = 'dfa'"
+                    :class="['viz-tab', { active: vizTab === 'dfa' }]"
+                    v-if="store.regexResult.dfaSvg"
+                  >
+                    DFA
+                  </button>
+                  <button
+                    @click="vizTab = 'minimized'"
+                    :class="['viz-tab', { active: vizTab === 'minimized' }]"
+                    v-if="store.regexResult.minimizedDfaSvg"
+                  >
+                    最小化DFA
+                  </button>
+                </div>
+
+                <!-- SVG 显示区域 -->
+                <div class="svg-container">
+                  <div v-if="vizTab === 'nfa' && store.regexResult.nfaSvg" class="svg-diagram">
+                    <h4>NFA (非确定有限自动机)</h4>
+                    <div v-html="store.regexResult.nfaSvg" class="svg-content"></div>
+                  </div>
+                  <div v-if="vizTab === 'dfa' && store.regexResult.dfaSvg" class="svg-diagram">
+                    <h4>DFA (确定有限自动机)</h4>
+                    <div v-html="store.regexResult.dfaSvg" class="svg-content"></div>
+                  </div>
+                  <div v-if="vizTab === 'minimized' && store.regexResult.minimizedDfaSvg" class="svg-diagram">
+                    <h4>最小化DFA</h4>
+                    <div v-html="store.regexResult.minimizedDfaSvg" class="svg-content"></div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -171,7 +235,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useCompilerStore } from '../stores/compiler'
 
 const store = useCompilerStore()
@@ -179,6 +243,11 @@ const store = useCompilerStore()
 const activeTab = ref<'build' | 'match'>('build')
 const regexPattern = ref('')
 const matchInput = ref('')
+const hasPerformedMatch = ref(false) // 跟踪是否执行过匹配操作
+
+// 结果显示相关
+const resultTab = ref<'description' | 'visualization'>('description')
+const vizTab = ref<'nfa' | 'dfa' | 'minimized'>('nfa')
 
 const examples = [
   { regex: 'a*', description: '零个或多个a' },
@@ -191,10 +260,19 @@ const canMatch = computed(() => {
   return regexPattern.value.trim() !== '' && matchInput.value.trim() !== ''
 })
 
+const hasVisualization = computed(() => {
+  return store.regexResult && (
+    store.regexResult.nfaSvg ||
+    store.regexResult.dfaSvg ||
+    store.regexResult.minimizedDfaSvg
+  )
+})
+
 const handleBuild = async () => {
   if (!regexPattern.value.trim()) return
 
   try {
+    hasPerformedMatch.value = false // 重置匹配状态
     await store.buildRegex(regexPattern.value.trim())
   } catch (error) {
     // 错误已经在store中处理
@@ -205,6 +283,7 @@ const handleMatch = async () => {
   if (!canMatch.value) return
 
   try {
+    hasPerformedMatch.value = true // 标记已执行匹配
     await store.matchRegex(regexPattern.value.trim(), matchInput.value.trim())
   } catch (error) {
     // 错误已经在store中处理
@@ -214,6 +293,7 @@ const handleMatch = async () => {
 const handleClear = () => {
   regexPattern.value = ''
   matchInput.value = ''
+  hasPerformedMatch.value = false // 重置匹配状态
   store.clearRegexResult()
 }
 
@@ -237,6 +317,23 @@ const loadExample = (example: typeof examples[0]) => {
     }
   }
 }
+
+// 监听可视化数据变化，自动设置默认显示类型
+watch(hasVisualization, (newVal) => {
+  if (newVal && store.regexResult) {
+    // 当有可视化数据时，自动切换到可视化标签页
+    resultTab.value = 'visualization'
+
+    // 设置默认显示的可视化类型（优先显示NFA）
+    if (store.regexResult.nfaSvg) {
+      vizTab.value = 'nfa'
+    } else if (store.regexResult.dfaSvg) {
+      vizTab.value = 'dfa'
+    } else if (store.regexResult.minimizedDfaSvg) {
+      vizTab.value = 'minimized'
+    }
+  }
+})
 
 onMounted(() => {
   // 检查服务器连接
@@ -544,5 +641,114 @@ onMounted(() => {
 
 .status-indicator.disconnected {
   color: #e74c3c;
+}
+
+/* 结果标签页样式 */
+.result-tabs {
+  display: flex;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #e1e8ed;
+}
+
+.result-tabs .tab {
+  background: none;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: #7f8c8d;
+  border-bottom: 2px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.result-tabs .tab.active {
+  color: #27ae60;
+  border-bottom-color: #27ae60;
+}
+
+.result-tabs .tab:hover {
+  color: #27ae60;
+}
+
+/* 可视化标签页样式 */
+.visualization-tabs {
+  display: flex;
+  margin-bottom: 1rem;
+  gap: 0.5rem;
+}
+
+.viz-tab {
+  background: #f8f9fa;
+  border: 1px solid #e1e8ed;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-weight: 500;
+  color: #2c3e50;
+  transition: all 0.3s ease;
+}
+
+.viz-tab.active {
+  background: #8e44ad;
+  color: white;
+  border-color: #8e44ad;
+}
+
+.viz-tab:hover {
+  background: #e9ecef;
+  border-color: #8e44ad;
+}
+
+.viz-tab.active:hover {
+  background: #9b59b6;
+}
+
+/* SVG 容器样式 */
+.svg-container {
+  margin-top: 1rem;
+}
+
+.svg-diagram {
+  background: white;
+  border: 1px solid #e1e8ed;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.svg-diagram h4 {
+  margin: 0 0 1rem 0;
+  color: #2c3e50;
+  text-align: center;
+  font-size: 1.1rem;
+}
+
+.svg-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+  overflow: auto;
+}
+
+.svg-content svg {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .visualization-tabs {
+    flex-direction: column;
+  }
+
+  .viz-tab {
+    text-align: center;
+  }
+
+  .svg-content {
+    padding: 0.5rem;
+  }
 }
 </style>

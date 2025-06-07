@@ -243,6 +243,15 @@ namespace APIHandlers {
                 result.message = "Automata built successfully";
                 result.nfaDescription = RegexAutomata::getNFADescription();
                 result.dfaDescription = RegexAutomata::getDFADescription();
+                
+                // 生成SVG图像
+                std::string nfaDot = RegexAutomata::generateNFADot();
+                std::string dfaDot = RegexAutomata::generateDFADot();
+                std::string minimizedDfaDot = RegexAutomata::generateMinimizedDFADot();
+                
+                result.nfaSvg = generateSVGFromDot(nfaDot);
+                result.dfaSvg = generateSVGFromDot(dfaDot);
+                result.minimizedDfaSvg = generateSVGFromDot(minimizedDfaDot);
             } else {
                 result.message = "Failed to build automata";
             }
@@ -336,6 +345,15 @@ namespace APIHandlers {
                 result.message = result.matchResult ? "String matches regex" : "String does not match regex";
                 result.nfaDescription = RegexAutomata::getNFADescription();
                 result.dfaDescription = RegexAutomata::getDFADescription();
+                
+                // 生成SVG图像
+                std::string nfaDot = RegexAutomata::generateNFADot();
+                std::string dfaDot = RegexAutomata::generateDFADot();
+                std::string minimizedDfaDot = RegexAutomata::generateMinimizedDFADot();
+                
+                result.nfaSvg = generateSVGFromDot(nfaDot);
+                result.dfaSvg = generateSVGFromDot(dfaDot);
+                result.minimizedDfaSvg = generateSVGFromDot(minimizedDfaDot);
             } else {
                 result.success = false;
                 result.message = "Failed to build automata from regex";
@@ -473,6 +491,9 @@ namespace APIHandlers {
         json["nfaDescription"] = result.nfaDescription;
         json["dfaDescription"] = result.dfaDescription;
         json["matchResult"] = result.matchResult;
+        json["nfaSvg"] = result.nfaSvg;
+        json["dfaSvg"] = result.dfaSvg;
+        json["minimizedDfaSvg"] = result.minimizedDfaSvg;
         
         return json;
     }

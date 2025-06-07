@@ -577,36 +577,23 @@ namespace DFAMinimizer {
     
     void print_minimized_dfa() {
         std::cout << "\n=== Minimized DFA ===\n";
-        std::cout << "States: ";
+        std::cout << "Partitions: " << partitions.size() << "\n";
         for (int i = 0; i < partitions.size(); i++) {
-            std::cout << i << ' ';
-        }
-        std::cout << '\n';
-
-        std::cout << "Alphabet: ";
-        for (const auto &symbol : DataStructures::alphabet) {
-            std::cout << symbol << ' ';
-        }
-        std::cout << '\n';
-
-        std::cout << "Transitions: ";
-        for (const auto &[from, symbol, to] : minimized_transitions) {
-            std::cout << "f(" << from << ", " << symbol << ") = " << to << " ";
-        }
-        std::cout << '\n';
-        
-        std::cout << "Partitions: ";
-        for (int i = 0; i < partitions.size(); i++) {
-            std::cout << "{";
+            std::cout << "Partition " << i << ": {";
             bool first = true;
             for (auto state : partitions[i]) {
-                if (!first) std::cout << ",";
+                if (!first) std::cout << ", ";
                 std::cout << state;
                 first = false;
             }
-            std::cout << "} ";
+            std::cout << "}\n";
         }
-        std::cout << '\n';
+        
+        std::cout << "Minimized Transitions: ";
+        for (const auto& [from, symbol, to] : minimized_transitions) {
+            std::cout << "f(" << from << ", " << symbol << ") = " << to << " ";
+        }
+        std::cout << "\n";
     }
     
     void export_to_dot(const std::string &filename) {
@@ -704,7 +691,6 @@ namespace RegexBuilder {
             
             // 4. 构建NFA
             NFAConstructor::build_nfa_from_postfix(postfix);
-            NFAManager::initialize();
             
             // 5. 设置最终状态
             if (DataStructures::state_stack.size() >= 2) {
@@ -714,6 +700,9 @@ namespace RegexBuilder {
                 DataStructures::state_stack.pop();
                 
                 DataStructures::nfa_states[final_state].accept_state = true;
+                
+                // 初始化NFA管理器（现在接受状态已经设置好了）
+                NFAManager::initialize();
                 
                 // 6. 转换为DFA
                 DFAConverter::convert_nfa_to_dfa(start_state, DataStructures::nfa_states.size());
@@ -845,33 +834,158 @@ namespace RegexBuilder {
     bool isReady() {
         return isInitialized;
     }
+    
+    // 生成NFA的DOT文件内容
+    std::string generateNFADotContent() {
+        if (!isInitialized) return "";
+        
+        std::stringstream dot;
+        dot << "digraph NFA {" << std::endl;
+        dot << "    rankdir=LR;" << std::endl;
+        dot << "    node [shape=circle];" << std::endl;
+        dot << std::endl;
+        
+        // 创建一个隐藏的起始节点
+        dot << "    __start [shape=point];" << std::endl;
+        dot << "    __start -> " << NFAManager::initial_state << ";" << std::endl;
+        dot << std::endl;
+        
+        // 标记接受状态
+        if (!NFAManager::accept_states.empty()) {
+            dot << "    node [shape=doublecircle];" << std::endl;
+            for (const auto& state : NFAManager::accept_states) {
+                dot << "    " << state << ";" << std::endl;
+            }
+            dot << "    node [shape=circle];" << std::endl;
+        }
+        dot << std::endl;
+        
+        // 生成转移边
+        for (const auto& [from, symbol, to] : NFAManager::transitions) {
+            dot << "    " << from << " -> " << to;
+            if (symbol == '#') {
+                dot << " [label=\"ε\"];" << std::endl;  // epsilon转换
+            } else {
+                dot << " [label=\"" << symbol << "\"];" << std::endl;
+            }
+        }
+        
+        dot << "}" << std::endl;
+        return dot.str();
+    }
+    
+    // 生成DFA的DOT文件内容
+    std::string generateDFADotContent() {
+        if (!isInitialized) return "";
+        
+        std::stringstream dot;
+        dot << "digraph DFA {" << std::endl;
+        dot << "    rankdir=LR;" << std::endl;
+        dot << std::endl;
+        
+        // 创建一个隐藏的起始节点
+        dot << "    __start [shape=point];" << std::endl;
+        dot << "    __start -> " << DFAManager::initial_state << ";" << std::endl;
+        dot << std::endl;
+        
+        // 确定接受状态集合
+        std::set<int> accept_states_set(DFAManager::accept_states.begin(), DFAManager::accept_states.end());
+        
+        // 为每个状态设置正确的形状
+        for (int i = 0; i < DFAManager::state_count; i++) {
+            if (accept_states_set.find(i) != accept_states_set.end()) {
+                dot << "    " << i << " [shape=doublecircle];" << std::endl;
+            } else {
+                dot << "    " << i << " [shape=circle];" << std::endl;
+            }
+        }
+        dot << std::endl;
+        
+        // 生成转移边
+        for (const auto& [from, symbol, to] : DFAManager::transitions) {
+            dot << "    " << from << " -> " << to;
+            dot << " [label=\"" << symbol << "\"];" << std::endl;
+        }
+        
+        dot << "}" << std::endl;
+        return dot.str();
+    }
+    
+    // 生成最小化DFA的DOT文件内容
+    std::string generateMinimizedDFADotContent() {
+        if (!isInitialized) return "";
+        
+        std::stringstream dot;
+        dot << "digraph MinimizedDFA {" << std::endl;
+        dot << "    rankdir=LR;" << std::endl;
+        dot << std::endl;
+        
+        // 找到初始分区
+        int initial_partition = -1;
+        if (DFAManager::initial_state < DFAMinimizer::state_partition.size()) {
+            initial_partition = DFAMinimizer::state_partition[DFAManager::initial_state];
+        }
+        
+        // 确定接受分区
+        std::set<int> accept_partitions;
+        for (const auto& state : DFAManager::accept_states) {
+            if (state < DFAMinimizer::state_partition.size()) {
+                accept_partitions.insert(DFAMinimizer::state_partition[state]);
+            }
+        }
+        
+        // 先声明起始节点
+        dot << "    __start [shape=point];" << std::endl;
+        
+        // 为每个分区设置正确的形状
+        for (int i = 0; i < DFAMinimizer::partitions.size(); i++) {
+            if (accept_partitions.find(i) != accept_partitions.end()) {
+                dot << "    " << i << " [shape=doublecircle];" << std::endl;
+            } else {
+                dot << "    " << i << " [shape=circle];" << std::endl;
+            }
+        }
+        
+        // 初始状态连接
+        if (initial_partition != -1) {
+            dot << "    __start -> " << initial_partition << ";" << std::endl;
+        }
+        dot << std::endl;
+        
+        // 生成转移边
+        for (const auto& [from, symbol, to] : DFAMinimizer::minimized_transitions) {
+            dot << "    " << from << " -> " << to;
+            dot << " [label=\"" << symbol << "\"];" << std::endl;
+        }
+        
+        dot << "}" << std::endl;
+        
+        // 调试：保存DOT内容到文件
+        std::ofstream debug_file("/tmp/minimized_dfa_debug.dot");
+        debug_file << dot.str();
+        debug_file.close();
+        std::cout << "DEBUG: DOT content saved to /tmp/minimized_dfa_debug.dot" << std::endl;
+        
+        return dot.str();
+    }
+
+    // ...existing code...
 }
 
-// RegexAutomata 命名空间 - 提供对外API接口
+// 公共API实现
 namespace RegexAutomata {
-    static bool automatonBuilt = false;
     
+    // 自动机构建
     bool buildFromRegex(const std::string& regex) {
-        try {
-            automatonBuilt = RegexBuilder::buildAutomataFromRegex(regex);
-            return automatonBuilt;
-        } catch (const std::exception& e) {
-            automatonBuilt = false;
-            return false;
-        }
+        return RegexBuilder::buildAutomataFromRegex(regex);
     }
     
+    // 字符串匹配
     bool matchString(const std::string& input) {
-        if (!automatonBuilt) {
-            return false;
-        }
-        try {
-            return RegexBuilder::matchString(input);
-        } catch (const std::exception& e) {
-            return false;
-        }
+        return RegexBuilder::matchString(input);
     }
     
+    // 获取自动机描述
     std::string getNFADescription() {
         return RegexBuilder::getNFADescription();
     }
@@ -880,79 +994,56 @@ namespace RegexAutomata {
         return RegexBuilder::getDFADescription();
     }
     
+    // DOT文件生成（用于可视化）
+    std::string generateNFADot() {
+        return RegexBuilder::generateNFADotContent();
+    }
+    
+    std::string generateDFADot() {
+        return RegexBuilder::generateDFADotContent();
+    }
+    
+    std::string generateMinimizedDFADot() {
+        return RegexBuilder::generateMinimizedDFADotContent();
+    }
+    
+    // 调试和信息输出
     void printNFA() {
-        // NFA打印功能待实现
-        std::cout << "NFA printing not yet implemented" << std::endl;
+        NFAManager::print_nfa();
     }
     
     void printDFA() {
-        // DFA打印功能待实现
-        std::cout << "DFA printing not yet implemented" << std::endl;
+        DFAManager::print_dfa();
     }
     
     void printMinimizedDFA() {
-        // 最小化DFA打印功能待实现
-        std::cout << "Minimized DFA printing not yet implemented" << std::endl;
+        // 实现最小化DFA的打印
+        std::cout << "\n=== Minimized DFA ===\n";
+        std::cout << "Partitions: " << DFAMinimizer::partitions.size() << "\n";
+        for (int i = 0; i < DFAMinimizer::partitions.size(); i++) {
+            std::cout << "Partition " << i << ": {";
+            bool first = true;
+            for (auto state : DFAMinimizer::partitions[i]) {
+                if (!first) std::cout << ", ";
+                std::cout << state;
+                first = false;
+            }
+            std::cout << "}\n";
+        }
+        
+        std::cout << "Minimized Transitions: ";
+        for (const auto& [from, symbol, to] : DFAMinimizer::minimized_transitions) {
+            std::cout << "f(" << from << ", " << symbol << ") = " << to << " ";
+        }
+        std::cout << "\n";
     }
     
+    // 自动机状态管理
     void reset() {
-        automatonBuilt = false;
         RegexBuilder::resetState();
     }
     
     bool isBuilt() {
-        return automatonBuilt;
+        return RegexBuilder::isReady();
     }
 }
-
-/*
-// 主函数
-int main() {
-    freopen("in.txt", "r", stdin);
-    freopen("out.txt", "w", stdout);
-    
-    std::string input;
-    std::cin >> input;
-    
-    // 1. 输入验证
-    InputValidator::validate_input(input);
-    
-    // 2. 预处理正则表达式
-    std::string processed_regex = RegexPreprocessor::add_concatenation(input);
-    std::cout << "Processed regex: " << processed_regex << '\n';
-
-    // 3. 转换为后缀表达式
-    std::string postfix = RegexConverter::infix_to_postfix(processed_regex);
-    std::cout << "Postfix expression: " << postfix << '\n';
-
-    // 4. 构建NFA
-    NFAConstructor::build_nfa_from_postfix(postfix);
-    NFAManager::initialize();
-    NFAManager::print_nfa();
-
-    // 5. 设置最终状态
-    int final_state = DataStructures::state_stack.top(); 
-    DataStructures::state_stack.pop();
-    int start_state = DataStructures::state_stack.top(); 
-    DataStructures::state_stack.pop();
-    
-    std::cout << "Start state: " << start_state << ", Final state: " << final_state << '\n';
-    DataStructures::nfa_states[final_state].accept_state = true;
-
-    // 6. 转换为DFA
-    DFAConverter::convert_nfa_to_dfa(start_state, DataStructures::nfa_states.size());
-    DFAManager::initialize();
-    DFAManager::print_dfa();
-
-    // 7. 最小化DFA
-    DFAMinimizer::minimize_dfa();
-    DFAMinimizer::print_minimized_dfa();
-    
-    // 8. 导出图形化表示
-    DFAMinimizer::export_to_dot("dfa.dot");
-    system("dot -Tsvg dfa.dot -o dfa.svg");
-    system("code --new-window dfa.svg");
-    
-    return 0;
-}
-*/

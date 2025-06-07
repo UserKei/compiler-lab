@@ -14,6 +14,11 @@ namespace RegexAutomata {
     std::string getNFADescription();
     std::string getDFADescription();
     
+    // DOT文件生成（用于可视化）
+    std::string generateNFADot();
+    std::string generateDFADot();
+    std::string generateMinimizedDFADot();
+    
     // 调试和信息输出
     void printNFA();
     void printDFA();

@@ -50,6 +50,9 @@ export interface RegexResponse {
   nfaDescription: string
   dfaDescription: string
   matchResult?: boolean
+  nfaSvg: string
+  dfaSvg: string
+  minimizedDfaSvg: string
 }
 
 export interface HealthResponse {

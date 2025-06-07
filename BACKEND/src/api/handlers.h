@@ -22,6 +22,9 @@ namespace APIHandlers {
         std::string nfaDescription;
         std::string dfaDescription;
         bool matchResult;
+        std::string nfaSvg;
+        std::string dfaSvg;
+        std::string minimizedDfaSvg;
     };
     
     // API端点处理函数
