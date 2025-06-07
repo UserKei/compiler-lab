@@ -119,30 +119,3 @@ cd BACKEND/build
 make             # 编译
 ./compiler_api   # 运行服务器
 ```
-
-## 项目特色
-
-- **CORS支持**: 后端已配置跨域资源共享
-- **代理配置**: 前端Vite配置了API代理，避免跨域问题
-- **错误处理**: 完善的错误处理和用户反馈
-- **响应式设计**: 现代化的用户界面
-
-## 贡献指南
-
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 创建 Pull Request
-
-## 许可证
-
-MIT License
-
-## 作者
-
-User_Kei
-
----
-
-*构建时间: 2025年6月*
