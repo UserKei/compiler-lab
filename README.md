@@ -141,7 +141,7 @@ MIT License
 
 ## 作者
 
-Kei - 编译器工具集开发者
+User_Kei
 
 ---
 
