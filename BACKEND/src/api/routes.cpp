@@ -35,6 +35,22 @@ namespace APIRoutes {
             return res;
         });
         
+        // SLR1语法分析端点
+        CROW_ROUTE(app, "/api/slr1/parse").methods("POST"_method)
+        ([](const crow::request& req) {
+            return APIHandlers::handleSLR1Parse(req);
+        });
+        
+        CROW_ROUTE(app, "/api/slr1/parse").methods("OPTIONS"_method)
+        ([](const crow::request& req) {
+            crow::response res(200);
+            res.add_header("Access-Control-Allow-Origin", "*");
+            res.add_header("Access-Control-Allow-Methods", "POST, OPTIONS");
+            res.add_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+            res.add_header("Access-Control-Max-Age", "86400");
+            return res;
+        });
+        
         // 正则表达式构建端点
         CROW_ROUTE(app, "/api/regex/build").methods("POST"_method)
         ([](const crow::request& req) {

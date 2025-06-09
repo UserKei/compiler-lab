@@ -15,6 +15,16 @@ namespace APIHandlers {
         std::map<std::string, std::vector<std::string>> productions;
     };
     
+    // SLR1语法分析相关
+    struct SLR1ParseResult {
+        bool success;
+        std::string message;
+        std::vector<std::string> parseSteps;
+        std::map<std::string, std::vector<std::string>> productions;
+        std::map<std::string, std::vector<std::string>> firstSets;
+        std::map<std::string, std::vector<std::string>> followSets;
+    };
+    
     // 正则表达式自动机相关
     struct RegexResult {
         bool success;
@@ -29,6 +39,7 @@ namespace APIHandlers {
     
     // API端点处理函数
     crow::response handleLR0Parse(const crow::request& req);
+    crow::response handleSLR1Parse(const crow::request& req);
     crow::response handleRegexBuild(const crow::request& req);
     crow::response handleRegexMatch(const crow::request& req);
     crow::response handleGrammarUpload(const crow::request& req);
@@ -38,5 +49,6 @@ namespace APIHandlers {
     std::string vectorToJson(const std::vector<std::string>& vec);
     std::string mapToJson(const std::map<std::string, std::vector<std::string>>& map);
     crow::json::wvalue resultToJson(const LR0ParseResult& result);
+    crow::json::wvalue resultToJson(const SLR1ParseResult& result);
     crow::json::wvalue resultToJson(const RegexResult& result);
 }

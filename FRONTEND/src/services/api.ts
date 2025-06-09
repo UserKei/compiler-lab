@@ -35,6 +35,23 @@ export interface LR0ParseResponse {
   productions: Record<string, string[][]>
 }
 
+export interface SLR1ParseRequest {
+  grammar: string
+  input: string
+}
+
+export interface SLR1ParseResponse {
+  success: boolean
+  message: string
+  isAccepted: boolean
+  parseSteps: ParseStep[]
+  parseTable: ParseTable
+  svgDiagram: string
+  productions: Record<string, string[][]>
+  firstSets: Record<string, string[]>
+  followSets: Record<string, string[]>
+}
+
 export interface RegexBuildRequest {
   regex: string
 }
@@ -98,6 +115,14 @@ class ApiService {
   // LR0语法分析
   async parseLR0(data: LR0ParseRequest): Promise<LR0ParseResponse> {
     return this.request<LR0ParseResponse>('/lr0/parse', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  // SLR1语法分析
+  async parseSLR1(data: SLR1ParseRequest): Promise<SLR1ParseResponse> {
+    return this.request<SLR1ParseResponse>('/slr1/parse', {
       method: 'POST',
       body: JSON.stringify(data),
     })

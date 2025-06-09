@@ -1,5 +1,6 @@
 #include "handlers.h"
 #include "../core/lr0_parser.h"
+#include "../core/slr1_parser.h"
 #include "../core/regex_automata.h"
 #include <fstream>
 #include <sstream>
@@ -174,6 +175,160 @@ namespace APIHandlers {
             auto totalDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
             
             std::cout << "[INFO] LR0 parse request processed in " << totalDuration.count() << "ms" << std::endl;
+            
+            crow::response res(200, response);
+            res.add_header("Access-Control-Allow-Origin", "*");
+            res.add_header("Content-Type", "application/json");
+            return res;
+            
+        } catch (const std::exception& e) {
+            crow::json::wvalue error;
+            error["error"] = "Internal server error: " + std::string(e.what());
+            crow::response res(500, error);
+            res.add_header("Access-Control-Allow-Origin", "*");
+            return res;
+        }
+    }
+    
+    // SLR1语法分析端点
+    crow::response handleSLR1Parse(const crow::request& req) {
+        auto startTime = std::chrono::steady_clock::now();
+        const int MAX_PROCESSING_TIME_SECONDS = 20; // 最大处理时间20秒
+        
+        try {
+            auto jsonBody = crow::json::load(req.body);
+            if (!jsonBody) {
+                crow::json::wvalue error;
+                error["error"] = "Invalid JSON format";
+                return crow::response(400, error);
+            }
+            
+            // 获取请求参数
+            std::string grammar = jsonBody["grammar"].s();
+            std::string input = jsonBody["input"].s();
+            
+            if (grammar.empty()) {
+                crow::json::wvalue error;
+                error["error"] = "Grammar is required";
+                return crow::response(400, error);
+            }
+            
+            if (input.empty()) {
+                crow::json::wvalue error;
+                error["error"] = "Input string is required";
+                return crow::response(400, error);
+            }
+            
+            // 读取语法
+            SLR1Parser::readGrammarFromString(grammar);
+            
+            // 执行SLR1解析
+            auto result = SLR1Parser::parseInput(input);
+            
+            // 构建响应
+            crow::json::wvalue response;
+            response["success"] = result.success;
+            response["message"] = result.message;
+            response["isAccepted"] = result.isAccepted;
+            
+            // 解析步骤
+            crow::json::wvalue parseSteps(crow::json::type::List);
+            for (size_t i = 0; i < result.parseSteps.size(); ++i) {
+                const auto& step = result.parseSteps[i];
+                crow::json::wvalue stepJson;
+                stepJson["step"] = step.step;
+                stepJson["stateStack"] = step.stateStack;
+                stepJson["symbolStack"] = step.symbolStack;
+                stepJson["remainingInput"] = step.remainingInput;
+                stepJson["action"] = step.action;
+                parseSteps[i] = std::move(stepJson);
+            }
+            response["parseSteps"] = std::move(parseSteps);
+            
+            // 分析表
+            crow::json::wvalue parseTable;
+            crow::json::wvalue headers(crow::json::type::List);
+            for (size_t i = 0; i < result.parseTable.headers.size(); ++i) {
+                headers[i] = result.parseTable.headers[i];
+            }
+            parseTable["headers"] = std::move(headers);
+            
+            crow::json::wvalue rows(crow::json::type::List);
+            for (size_t i = 0; i < result.parseTable.rows.size(); ++i) {
+                const auto& row = result.parseTable.rows[i];
+                crow::json::wvalue rowJson;
+                rowJson["state"] = row.state;
+                
+                // Actions
+                crow::json::wvalue actions;
+                for (const auto& action : row.actions) {
+                    actions[action.first] = action.second;
+                }
+                rowJson["actions"] = std::move(actions);
+                
+                // Gotos
+                crow::json::wvalue gotos;
+                for (const auto& gotoItem : row.gotos) {
+                    gotos[gotoItem.first] = gotoItem.second;
+                }
+                rowJson["gotos"] = std::move(gotos);
+                
+                rows[i] = std::move(rowJson);
+            }
+            parseTable["rows"] = std::move(rows);
+            response["parseTable"] = std::move(parseTable);
+            
+            // 生成SVG图表
+            if (!result.dotFile.empty()) {
+                std::string svgContent = generateSVGFromDot(result.dotFile);
+                response["svgDiagram"] = svgContent;
+            } else {
+                response["svgDiagram"] = "";
+            }
+            
+            // 产生式
+            crow::json::wvalue productions;
+            for (const auto& prod : result.productions) {
+                crow::json::wvalue rightSides(crow::json::type::List);
+                for (size_t i = 0; i < prod.second.size(); ++i) {
+                    crow::json::wvalue rightSide(crow::json::type::List);
+                    for (size_t j = 0; j < prod.second[i].size(); ++j) {
+                        rightSide[j] = prod.second[i][j];
+                    }
+                    rightSides[i] = std::move(rightSide);
+                }
+                productions[prod.first] = std::move(rightSides);
+            }
+            response["productions"] = std::move(productions);
+            
+            // FIRST集合
+            crow::json::wvalue firstSets;
+            for (const auto& firstSet : result.firstSets) {
+                crow::json::wvalue symbols(crow::json::type::List);
+                size_t i = 0;
+                for (const auto& symbol : firstSet.second) {
+                    symbols[i++] = symbol;
+                }
+                firstSets[firstSet.first] = std::move(symbols);
+            }
+            response["firstSets"] = std::move(firstSets);
+            
+            // FOLLOW集合
+            crow::json::wvalue followSets;
+            for (const auto& followSet : result.followSets) {
+                crow::json::wvalue symbols(crow::json::type::List);
+                size_t i = 0;
+                for (const auto& symbol : followSet.second) {
+                    symbols[i++] = symbol;
+                }
+                followSets[followSet.first] = std::move(symbols);
+            }
+            response["followSets"] = std::move(followSets);
+            
+            auto endTime = std::chrono::steady_clock::now();
+            auto totalDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+            
+            std::cout << "[INFO] SLR1 parse request processed in " << totalDuration.count() << "ms" << std::endl;
             
             crow::response res(200, response);
             res.add_header("Access-Control-Allow-Origin", "*");

@@ -16,7 +16,7 @@ onMounted(() => {
       <div class="container">
         <h1 class="hero-title">编译器工具集</h1>
         <p class="hero-subtitle">
-          强大的编译原理学习工具，支持LR0语法分析和正则表达式自动机构建
+          强大的编译原理学习工具，支持LR0/SLR1语法分析和正则表达式自动机构建
         </p>
 
         <div class="connection-check">
@@ -37,6 +37,15 @@ onMounted(() => {
             <h3>LR0 语法分析</h3>
             <p>输入上下文无关文法，分析字符串的语法结构，查看详细的分析步骤和产生式应用过程</p>
             <RouterLink to="/lr0" class="feature-link">
+              立即体验 →
+            </RouterLink>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">🎯</div>
+            <h3>SLR1 语法分析</h3>
+            <p>LR0的增强版本，使用FIRST/FOLLOW集合解决冲突，支持更多语法类型</p>
+            <RouterLink to="/slr1" class="feature-link">
               立即体验 →
             </RouterLink>
           </div>

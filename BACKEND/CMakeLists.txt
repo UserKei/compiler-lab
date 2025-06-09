@@ -28,6 +28,7 @@ endif()
 add_executable(compiler_api
     src/main.cpp
     src/core/lr0_parser.cpp
+    src/core/slr1_parser.cpp
     src/core/regex_automata.cpp
     src/api/handlers.cpp
     src/api/routes.cpp

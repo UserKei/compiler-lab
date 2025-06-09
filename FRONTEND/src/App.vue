@@ -14,6 +14,7 @@ import { RouterLink, RouterView } from 'vue-router'
         <div class="nav-links">
           <RouterLink to="/" class="nav-link">首页</RouterLink>
           <RouterLink to="/lr0" class="nav-link">LR0分析</RouterLink>
+          <RouterLink to="/slr1" class="nav-link">SLR1分析</RouterLink>
           <RouterLink to="/regex" class="nav-link">正则自动机</RouterLink>
           <RouterLink to="/about" class="nav-link">关于</RouterLink>
         </div>

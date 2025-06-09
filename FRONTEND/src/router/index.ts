@@ -15,6 +15,11 @@ const router = createRouter({
       component: () => import('../views/LR0View.vue'),
     },
     {
+      path: '/slr1',
+      name: 'slr1',
+      component: () => import('../views/SLR1View.vue'),
+    },
+    {
       path: '/regex',
       name: 'regex',
       component: () => import('../views/RegexView.vue'),

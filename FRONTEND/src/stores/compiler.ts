@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { apiService, type LR0ParseResponse, type RegexResponse } from '../services/api'
+import { apiService, type LR0ParseResponse, type SLR1ParseResponse, type RegexResponse } from '../services/api'
 
 export const useCompilerStore = defineStore('compiler', () => {
   // 状态
@@ -13,6 +13,11 @@ export const useCompilerStore = defineStore('compiler', () => {
   const lr0Grammar = ref('')
   const lr0Input = ref('')
 
+  // SLR1 相关状态
+  const slr1Result = ref<SLR1ParseResponse | null>(null)
+  const slr1Grammar = ref('')
+  const slr1Input = ref('')
+
   // 正则表达式相关状态
   const regexResult = ref<RegexResponse | null>(null)
   const regex = ref('')
@@ -20,8 +25,10 @@ export const useCompilerStore = defineStore('compiler', () => {
 
   // 计算属性
   const hasLR0Result = computed(() => lr0Result.value !== null)
+  const hasSLR1Result = computed(() => slr1Result.value !== null)
   const hasRegexResult = computed(() => regexResult.value !== null)
   const isLR0Success = computed(() => lr0Result.value?.success || false)
+  const isSLR1Success = computed(() => slr1Result.value?.success || false)
   const isRegexSuccess = computed(() => regexResult.value?.success || false)
 
   // 操作
@@ -65,6 +72,25 @@ export const useCompilerStore = defineStore('compiler', () => {
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'LR0分析失败'
       lr0Result.value = null
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // SLR1 语法分析
+  const parseSLR1 = async (grammar: string, input: string) => {
+    try {
+      setLoading(true)
+      slr1Grammar.value = grammar
+      slr1Input.value = input
+
+      const result = await apiService.parseSLR1({ grammar, input })
+      slr1Result.value = result
+      return result
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : 'SLR1分析失败'
+      slr1Result.value = null
       throw err
     } finally {
       setLoading(false)
@@ -115,6 +141,12 @@ export const useCompilerStore = defineStore('compiler', () => {
     lr0Input.value = ''
   }
 
+  const clearSLR1Result = () => {
+    slr1Result.value = null
+    slr1Grammar.value = ''
+    slr1Input.value = ''
+  }
+
   const clearRegexResult = () => {
     regexResult.value = null
     regex.value = ''
@@ -123,6 +155,7 @@ export const useCompilerStore = defineStore('compiler', () => {
 
   const clearAllResults = () => {
     clearLR0Result()
+    clearSLR1Result()
     clearRegexResult()
     clearError()
   }
@@ -135,23 +168,30 @@ export const useCompilerStore = defineStore('compiler', () => {
     lr0Result,
     lr0Grammar,
     lr0Input,
+    slr1Result,
+    slr1Grammar,
+    slr1Input,
     regexResult,
     regex,
     regexInput,
 
     // 计算属性
     hasLR0Result,
+    hasSLR1Result,
     hasRegexResult,
     isLR0Success,
+    isSLR1Success,
     isRegexSuccess,
 
     // 操作
     clearError,
     checkConnection,
     parseLR0,
+    parseSLR1,
     buildRegex,
     matchRegex,
     clearLR0Result,
+    clearSLR1Result,
     clearRegexResult,
     clearAllResults,
   }
