@@ -62,7 +62,7 @@
         <div class="tab-content">
           <!-- 分析步骤 -->
           <div v-if="activeTab === 'steps'" class="steps-section">
-            <h3>分析步骤</h3>
+            <h3>解析步骤</h3>
             <div class="table-wrapper">
               <table class="steps-table">
                 <thead>
@@ -80,10 +80,15 @@
                     <td class="monospace">{{ step.stateStack }}</td>
                     <td class="monospace">{{ step.symbolStack }}</td>
                     <td class="monospace">{{ step.remainingInput }}</td>
-                    <td class="monospace action">{{ step.action }}</td>
+                    <td class="monospace action" :class="getActionClass(step.action)">{{ step.action }}</td>
                   </tr>
                 </tbody>
               </table>
+              <div v-if="hasSLR1Result" class="parse-result-summary">
+                <span :class="isSLR1Success && slr1Result?.isAccepted ? 'accept-action' : 'error-action'">
+                  {{ isSLR1Success && slr1Result?.isAccepted ? 'accept' : 'reject' }}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -103,8 +108,11 @@
                 <tbody>
                   <tr v-for="row in slr1Result?.parseTable.rows" :key="row.state">
                     <td class="state-cell">{{ row.state }}</td>
-                    <td v-for="header in slr1Result?.parseTable.headers.slice(1)" :key="header" class="action-cell">
-                      <span v-if="row.actions[header] || row.gotos[header] !== undefined"
+                    <td v-for="header in slr1Result?.parseTable.headers.slice(1)" :key="header"
+                      class="action-cell clickable-cell"
+                      @click="handleCellClick(row.state, header, row.actions[header] || row.gotos[header])">
+                      <span
+                        v-if="(row.actions[header] || (row.gotos[header] !== undefined && row.gotos[header] !== -1))"
                         :class="getActionClass(row.actions[header] || row.gotos[header]?.toString())">
                         {{ row.actions[header] || row.gotos[header] }}
                       </span>
@@ -225,6 +233,27 @@ const getActionClass = (action: string) => {
   if (action.toString().startsWith('s')) return 'shift-action'
   if (action.toString().startsWith('r')) return 'reduce-action'
   return 'goto-action'
+}
+
+const handleCellClick = (state: number, symbol: string, action: string | number) => {
+  if (!action && action !== 0) return
+
+  console.log(`SLR1 表格点击 - 状态: ${state}, 符号: ${symbol}, 动作: ${action}`)
+
+  // 可以在这里添加更多的交互功能，比如显示详细信息
+  const actionStr = action.toString()
+
+  if (actionStr === 'acc') {
+    alert(`状态 ${state}: 接受输入`)
+  } else if (actionStr.startsWith('s')) {
+    const nextState = actionStr.substring(1)
+    alert(`状态 ${state}: 移入符号 "${symbol}" 并转到状态 ${nextState}`)
+  } else if (actionStr.startsWith('r')) {
+    const productionNum = actionStr.substring(1)
+    alert(`状态 ${state}: 使用产生式 ${productionNum} 进行归约`)
+  } else if (!isNaN(Number(actionStr))) {
+    alert(`状态 ${state}: 遇到非终结符 "${symbol}" 转到状态 ${actionStr}`)
+  }
 }
 </script>
 
@@ -464,6 +493,72 @@ const getActionClass = (action: string) => {
   background: white;
 }
 
+/* SLR1 步骤表格样式对齐 LR0 */
+.steps-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 1rem;
+}
+
+.steps-table th,
+.steps-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.steps-table th {
+  background: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+}
+
+.steps-table tr.accept-step {
+  background: #e6ffed;
+}
+
+.steps-table tr.reduce-step {
+  background: #fff7e6;
+}
+
+.steps-table tr.shift-step {
+  background: #e6f0ff;
+}
+
+.steps-table tr.error-step {
+  background: #ffeaea;
+}
+
+.action.accept-action {
+  color: #10b981;
+  font-weight: bold;
+}
+
+.action.shift-action {
+  color: #2563eb;
+  font-weight: bold;
+}
+
+.action.reduce-action {
+  color: #d97706;
+  font-weight: bold;
+}
+
+.action.error-action {
+  color: #dc2626;
+  font-weight: bold;
+}
+
+.parse-result-summary {
+  margin-top: 1rem;
+  font-size: 1.1rem;
+  font-weight: bold;
+  text-align: left;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
 .steps-table th,
 .steps-table td,
 .parse-table th,
@@ -617,8 +712,119 @@ const getActionClass = (action: string) => {
   font-weight: 600;
 }
 
+.action-cell {
+  text-align: center;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-weight: 600;
+}
+
+.clickable-cell {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.clickable-cell:hover {
+  background-color: #f3f4f6;
+}
+
+.accept-action {
+  color: #10b981;
+  background: #d1fae5;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.shift-action {
+  color: #3b82f6;
+  background: #dbeafe;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.reduce-action {
+  color: #f59e0b;
+  background: #fef3c7;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
+.goto-action {
+  color: #8b5cf6;
+  background: #ede9fe;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+}
+
 .production-right {
   color: #6b7280;
+}
+
+.parsing-output {
+  background: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 8px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.steps-table-formatted {
+  width: 100%;
+  border-collapse: collapse;
+  background: transparent;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9rem;
+}
+
+.steps-table-formatted th {
+  padding: 0.5rem 1rem;
+  text-align: left;
+  font-weight: bold;
+  background: transparent;
+  border: none;
+  color: #374151;
+}
+
+.steps-table-formatted td {
+  padding: 0.3rem 1rem;
+  text-align: left;
+  border: none;
+  background: transparent;
+}
+
+.separator-row td {
+  padding: 0.2rem 0;
+  font-weight: normal;
+  color: #6b7280;
+  text-align: left;
+}
+
+.step-number {
+  width: 60px;
+  text-align: left;
+}
+
+.state-stack {
+  min-width: 120px;
+}
+
+.symbol-stack {
+  min-width: 120px;
+}
+
+.remaining-input {
+  min-width: 120px;
+}
+
+.action-col {
+  min-width: 120px;
+  font-weight: normal;
+}
+
+.parse-result-line {
+  margin-top: 1rem;
+  font-size: 1.1rem;
+  font-weight: bold;
+  text-align: left;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
 }
 
 @media (max-width: 768px) {

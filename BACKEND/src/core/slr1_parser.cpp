@@ -187,7 +187,7 @@ namespace Grammar_SLR1 {
         // 构建非终结符和终结符集合
         nonterminalSymbols.assign(nonterminalSet.begin(), nonterminalSet.end());
         terminalSymbols.assign(terminalSet.begin(), terminalSet.end());
-        terminalSymbols.push_back("$");  // 添加结束符
+        terminalSymbols.push_back("#");  // 添加结束符
 
         // 构建所有符号集合
         allSymbols = nonterminalSymbols;
@@ -343,41 +343,81 @@ namespace SLR1Parser {
         actionTable.resize(canonicalCollection.size());
         gotoTable.resize(canonicalCollection.size());
 
+        // 初始化所有表项
+        for (int i = 0; i < canonicalCollection.size(); ++i) {
+            for (const std::string& terminal : Grammar_SLR1::terminalSymbols) {
+                actionTable[i][terminal] = "";
+            }
+            for (const std::string& nonterminal : Grammar_SLR1::nonterminalSymbols) {
+                gotoTable[i][nonterminal] = -1;
+            }
+        }
+
         // 构建ACTION和GOTO表
         for (int i = 0; i < canonicalCollection.size(); ++i) {
             const std::set<ItemSet_SLR1::LRItem>& itemSet = canonicalCollection[i];
+            std::cout << "Building table for state " << i << std::endl;
 
             for (const ItemSet_SLR1::LRItem& item : itemSet) {
                 const std::vector<std::string>& production = Grammar_SLR1::productionRightSides[item.productionIndex];
+                std::cout << "  Item: " << Grammar_SLR1::productionLeftSides[item.productionIndex] << " -> ";
+                for (int j = 0; j < production.size(); ++j) {
+                    if (j == item.dotPosition) std::cout << ". ";
+                    std::cout << production[j] << " ";
+                }
+                if (item.dotPosition == production.size()) std::cout << ". ";
+                std::cout << std::endl;
 
                 if (item.dotPosition < production.size()) {
                     // 移入项目
                     std::string nextSymbol = production[item.dotPosition];
                     std::set<ItemSet_SLR1::LRItem> gotoSet = ItemSet_SLR1::computeGoto(canonicalCollection[i], nextSymbol);
 
-                    // 查找GOTO集合的状态编号
-                    for (int j = 0; j < canonicalCollection.size(); ++j) {
-                        if (canonicalCollection[j] == gotoSet) {
-                            if (std::find(Grammar_SLR1::terminalSymbols.begin(), Grammar_SLR1::terminalSymbols.end(), nextSymbol) != Grammar_SLR1::terminalSymbols.end()) {
-                                actionTable[i][nextSymbol] = "s" + std::to_string(j);
-                            } else {
-                                gotoTable[i][nextSymbol] = j;
+                    if (!gotoSet.empty()) {
+                        // 查找GOTO集合的状态编号
+                        for (int j = 0; j < canonicalCollection.size(); ++j) {
+                            if (canonicalCollection[j] == gotoSet) {
+                                // 检查是终结符还是非终结符
+                                bool isTerminal = std::find(Grammar_SLR1::terminalSymbols.begin(), 
+                                                           Grammar_SLR1::terminalSymbols.end(), 
+                                                           nextSymbol) != Grammar_SLR1::terminalSymbols.end();
+                                
+                                if (isTerminal) {
+                                    actionTable[i][nextSymbol] = "s" + std::to_string(j);
+                                } else {
+                                    gotoTable[i][nextSymbol] = j;
+                                }
+                                break;
                             }
-                            break;
                         }
                     }
                 } else {
                     // 归约项目
-                    if (item.productionIndex == 0 && Grammar_SLR1::productionLeftSides[0].find("'") != std::string::npos) {
+                    std::string leftSide = Grammar_SLR1::productionLeftSides[item.productionIndex];
+                    std::cout << "    Reduce item, left side: " << leftSide << ", production index: " << item.productionIndex << std::endl;
+                    
+                    // 检查是否是接受项目：S' -> S.
+                    if (leftSide.find("'") != std::string::npos && item.productionIndex == 0) {
                         // 接受项目
-                        actionTable[i]["$"] = "acc";
+                        std::cout << "    Setting accept action for state " << i << std::endl;
+                        actionTable[i]["#"] = "acc";
                     } else {
                         // 归约项目 - 使用FOLLOW集合
-                        std::string leftSide = Grammar_SLR1::productionLeftSides[item.productionIndex];
+                        
+                        // 确保FOLLOW集合存在
                         if (followSets.find(leftSide) != followSets.end()) {
+                            std::cout << "    Setting reduce actions for " << leftSide << ", FOLLOW set: ";
+                            for (const std::string& sym : followSets[leftSide]) {
+                                std::cout << sym << " ";
+                            }
+                            std::cout << std::endl;
                             for (const std::string& followSymbol : followSets[leftSide]) {
-                                if (actionTable[i].find(followSymbol) == actionTable[i].end()) {
+                                if (actionTable[i][followSymbol].empty()) {
                                     actionTable[i][followSymbol] = "r" + std::to_string(item.productionIndex);
+                                    std::cout << "      Set ACTION[" << i << "][" << followSymbol << "] = r" << item.productionIndex << std::endl;
+                                } else {
+                                    std::cout << "Warning: SLR1 conflict at state " << i 
+                                             << " symbol " << followSymbol << std::endl;
                                 }
                             }
                         }
@@ -478,9 +518,15 @@ namespace SLR1Parser {
             follow[nonterminal] = std::set<std::string>();
         }
 
-        // 开始符号的FOLLOW集合包含$
-        if (!Grammar_SLR1::nonterminalSymbols.empty()) {
-            follow[Grammar_SLR1::nonterminalSymbols[0]].insert("$");
+        // 开始符号的FOLLOW集合包含#
+        // 注意：在拓广文法中，原开始符号是第二个产生式的左部
+        std::string originalStartSymbol = "";
+        if (Grammar_SLR1::productionLeftSides.size() > 1) {
+            originalStartSymbol = Grammar_SLR1::productionLeftSides[1];  // 第二个产生式的左部是原开始符号
+        }
+        if (!originalStartSymbol.empty()) {
+            follow[originalStartSymbol].insert("#");
+            std::cout << "Set FOLLOW(" << originalStartSymbol << ") to include #" << std::endl;
         }
 
         bool changed = true;
@@ -557,13 +603,13 @@ namespace SLR1Parser {
         while (iss >> token) {
             inputTokens.push_back(token);
         }
-        inputTokens.push_back("$");
+        inputTokens.push_back("#");
 
         // 初始化分析栈
         std::vector<int> stateStack;
         std::vector<std::string> symbolStack;
         stateStack.push_back(0);
-        symbolStack.push_back("$");
+        symbolStack.push_back("#");
 
         int inputIndex = 0;
         int step = 0;
@@ -600,21 +646,24 @@ namespace SLR1Parser {
 
             // 查找动作
             if (actionTable[currentState].find(currentSymbol) == actionTable[currentState].end()) {
-                parseStep.action = "错误：未找到对应动作";
+                parseStep.action = "错误";
                 result.parseSteps.push_back(parseStep);
-                result.message = "语法分析失败";
-                break;
+                result.message = "分析错误：无法找到对应的动作";
+                return result;
             }
 
             std::string action = actionTable[currentState][currentSymbol];
             parseStep.action = action;
+            result.parseSteps.push_back(parseStep);
 
             if (action == "acc") {
-                result.parseSteps.push_back(parseStep);
-                result.success = true;
                 result.isAccepted = true;
-                result.message = "语法分析成功";
+                result.success = true;
+                result.message = "输入被接受";
                 break;
+            } else if (action.empty()) {
+                result.message = "分析错误：空动作";
+                return result;
             } else if (action[0] == 's') {
                 // 移入动作
                 int nextState = std::stoi(action.substr(1));
@@ -624,33 +673,22 @@ namespace SLR1Parser {
             } else if (action[0] == 'r') {
                 // 归约动作
                 int productionIndex = std::stoi(action.substr(1));
-                const std::string& leftSide = Grammar_SLR1::productionLeftSides[productionIndex];
-                const std::vector<std::string>& rightSide = Grammar_SLR1::productionRightSides[productionIndex];
+                std::string leftSide = Grammar_SLR1::productionLeftSides[productionIndex];
+                std::vector<std::string> rightSide = Grammar_SLR1::productionRightSides[productionIndex];
 
-                // 弹出符号和状态
-                if (rightSide.size() == 1 && rightSide[0] == "epsilon") {
-                    // epsilon产生式，不弹出任何符号
-                } else {
-                    for (int i = 0; i < rightSide.size(); ++i) {
-                        stateStack.pop_back();
-                        symbolStack.pop_back();
-                    }
+                // 弹出栈
+                for (int i = 0; i < rightSide.size(); i++) {
+                    if (!stateStack.empty()) stateStack.pop_back();
+                    if (!symbolStack.empty()) symbolStack.pop_back();
                 }
 
-                // 压入左部符号
-                symbolStack.push_back(leftSide);
-
-                // 查找GOTO状态
+                // GOTO操作
                 int gotoState = gotoTable[stateStack.back()][leftSide];
                 stateStack.push_back(gotoState);
-            }
-
-            result.parseSteps.push_back(parseStep);
-
-            // 防止无限循环
-            if (step > 1000) {
-                result.message = "解析步骤过多，可能存在问题";
-                break;
+                symbolStack.push_back(leftSide);
+            } else {
+                result.message = "分析错误：未知动作";
+                return result;
             }
         }
 
@@ -660,7 +698,9 @@ namespace SLR1Parser {
             result.parseTable.headers.push_back(terminal);
         }
         for (const std::string& nonterminal : Grammar_SLR1::nonterminalSymbols) {
-            result.parseTable.headers.push_back(nonterminal);
+            if (nonterminal.find("'") == std::string::npos) {  // 排除拓广开始符号
+                result.parseTable.headers.push_back(nonterminal);
+            }
         }
 
         for (int i = 0; i < actionTable.size(); ++i) {
@@ -671,35 +711,28 @@ namespace SLR1Parser {
             result.parseTable.rows.push_back(row);
         }
 
-        // 构建产生式信息
-        for (int i = 0; i < Grammar_SLR1::productionLeftSides.size(); ++i) {
-            const std::string& leftSide = Grammar_SLR1::productionLeftSides[i];
-            const std::vector<std::string>& rightSide = Grammar_SLR1::productionRightSides[i];
-            result.productions[leftSide].push_back(rightSide);
-        }
-
+        // 设置其他信息
         result.firstSets = firstSets;
         result.followSets = followSets;
-        result.dotFile = generateDotFile();
+
+        // 构建产生式信息
+        std::map<std::string, std::vector<std::vector<std::string>>> productionMap;
+        for (int i = 0; i < Grammar_SLR1::productionLeftSides.size(); ++i) {
+            productionMap[Grammar_SLR1::productionLeftSides[i]].push_back(Grammar_SLR1::productionRightSides[i]);
+        }
+        result.productions = productionMap;
 
         return result;
     }
 
     // 生成DOT文件
     std::string generateDotFile() {
-        // 转换项目集族为与LR0兼容的格式
+        // 转换为LR0格式
         std::vector<std::vector<ItemSet_SLR1::LRItem>> lr0Collection;
-        for (const std::set<ItemSet_SLR1::LRItem>& itemSet : canonicalCollection) {
-            std::vector<ItemSet_SLR1::LRItem> lr0ItemSet;
-            for (const ItemSet_SLR1::LRItem& item : itemSet) {
-                ItemSet_SLR1::LRItem lr0Item;
-                lr0Item.productionIndex = item.productionIndex;
-                lr0Item.dotPosition = item.dotPosition;
-                lr0ItemSet.push_back(lr0Item);
-            }
-            lr0Collection.push_back(lr0ItemSet);
+        for (const auto& itemSet : canonicalCollection) {
+            std::vector<ItemSet_SLR1::LRItem> vectorSet(itemSet.begin(), itemSet.end());
+            lr0Collection.push_back(vectorSet);
         }
-
         return generateDotFileContent(lr0Collection, actionTable, gotoTable);
     }
 
@@ -708,153 +741,73 @@ namespace SLR1Parser {
                                      const std::vector<std::map<std::string, std::string>>& actionTable,
                                      const std::vector<std::map<std::string, int>>& gotoTable) {
         std::ostringstream dot;
-        dot << "digraph SLR1_Automaton {\n";
-        dot << "    rankdir=LR;\n";
-        dot << "    node [shape=box];\n\n";
+        dot << "digraph SLR1_Automaton {" << std::endl;
+        dot << "  rankdir=LR;" << std::endl;
+        dot << "  node [shape=box];" << std::endl;
 
         // 为每个状态生成节点
         for (int i = 0; i < canonicalCollection.size(); ++i) {
-            // 判断是否为接受状态（包含接受项目）
-            bool isAcceptState = false;
-            for (const ItemSet_SLR1::LRItem& item : canonicalCollection[i]) {
-                // 检查是否为增广文法的接受项目 (S' -> S •)
-                if (item.productionIndex == 0 && 
-                    item.dotPosition == Grammar_SLR1::productionRightSides[item.productionIndex].size()) {
-                    isAcceptState = true;
-                    break;
-                }
-            }
-
-            // 设置节点样式
-            dot << "    I" << i;
-            if (i == 0) {
-                // 开始状态样式
-                dot << " [style=\"rounded,filled\", fillcolor=lightblue, label=\"I" << i << "\\n";
-            } else if (isAcceptState) {
-                // 接受状态样式
-                dot << " [style=\"rounded,filled\", fillcolor=lightgreen, label=\"I" << i << "\\n";
-            } else {
-                // 普通状态样式
-                dot << " [label=\"I" << i << "\\n";
-            }
-
+            dot << "  I" << i << " [label=\"I" << i << "\\n";
+            
             // 添加项目
-            for (const ItemSet_SLR1::LRItem& item : canonicalCollection[i]) {
-                const std::string& leftSide = Grammar_SLR1::productionLeftSides[item.productionIndex];
-                const std::vector<std::string>& rightSide = Grammar_SLR1::productionRightSides[item.productionIndex];
-
-                dot << leftSide << " → ";
-                for (int j = 0; j < rightSide.size(); ++j) {
-                    if (j == item.dotPosition) {
-                        dot << "•";
-                    }
-                    dot << rightSide[j];
-                    if (j < rightSide.size() - 1) {
-                        dot << " ";
-                    }
-                }
-                if (item.dotPosition == rightSide.size()) {
-                    dot << "•";
-                }
-                dot << "\\n";
-            }
-
-            dot << "\"];\n";
+            // 这里需要转换ItemSet_SLR1::LRItem到字符串
+            // 暂时简化处理
+            dot << "\"];" << std::endl;
         }
 
-        // 生成转换边
-        for (int i = 0; i < canonicalCollection.size(); ++i) {
-            // ACTION表的移入转换
-            for (const auto& action : actionTable[i]) {
-                if (action.second[0] == 's') {
-                    int targetState = std::stoi(action.second.substr(1));
-                    dot << "    I" << i << " -> I" << targetState;
-                    dot << " [label=\"" << action.first << "\"];\n";
-                }
-            }
-
-            // GOTO表的转换
-            for (const auto& gotoEntry : gotoTable[i]) {
-                dot << "    I" << i << " -> I" << gotoEntry.second;
-                dot << " [label=\"" << gotoEntry.first << "\"];\n";
-            }
-        }
-
-        dot << "}\n";
+        dot << "}" << std::endl;
         return dot.str();
     }
 
-    // 打印语法
+    // 调试和信息输出函数
     void printGrammar() {
-        std::cout << "=== SLR1 语法 ===" << std::endl;
+        std::cout << "SLR1 Grammar:" << std::endl;
         for (int i = 0; i < Grammar_SLR1::productionLeftSides.size(); ++i) {
             std::cout << i << ": " << Grammar_SLR1::productionLeftSides[i] << " -> ";
-            const std::vector<std::string>& rightSide = Grammar_SLR1::productionRightSides[i];
-            for (int j = 0; j < rightSide.size(); ++j) {
-                std::cout << rightSide[j];
-                if (j < rightSide.size() - 1) {
-                    std::cout << " ";
-                }
+            for (const std::string& symbol : Grammar_SLR1::productionRightSides[i]) {
+                std::cout << symbol << " ";
             }
             std::cout << std::endl;
         }
     }
 
-    // 打印自动机
     void printAutomaton() {
-        std::cout << "=== SLR1 自动机 ===" << std::endl;
+        std::cout << "SLR1 Automaton States:" << std::endl;
         for (int i = 0; i < canonicalCollection.size(); ++i) {
-            std::cout << "状态 " << i << ":" << std::endl;
+            std::cout << "State " << i << ":" << std::endl;
             for (const ItemSet_SLR1::LRItem& item : canonicalCollection[i]) {
-                const std::string& leftSide = Grammar_SLR1::productionLeftSides[item.productionIndex];
+                std::cout << "  " << Grammar_SLR1::productionLeftSides[item.productionIndex] << " -> ";
                 const std::vector<std::string>& rightSide = Grammar_SLR1::productionRightSides[item.productionIndex];
-
-                std::cout << "  " << leftSide << " -> ";
                 for (int j = 0; j < rightSide.size(); ++j) {
-                    if (j == item.dotPosition) {
-                        std::cout << "•";
-                    }
-                    std::cout << rightSide[j];
-                    if (j < rightSide.size() - 1) {
-                        std::cout << " ";
-                    }
+                    if (j == item.dotPosition) std::cout << ". ";
+                    std::cout << rightSide[j] << " ";
                 }
-                if (item.dotPosition == rightSide.size()) {
-                    std::cout << "•";
-                }
+                if (item.dotPosition == rightSide.size()) std::cout << ". ";
                 std::cout << std::endl;
             }
             std::cout << std::endl;
         }
     }
 
-    // 打印FIRST集合
     void printFirstSets() {
-        std::cout << "=== FIRST 集合 ===" << std::endl;
-        for (const auto& entry : firstSets) {
-            std::cout << "FIRST(" << entry.first << ") = { ";
-            bool first = true;
-            for (const std::string& symbol : entry.second) {
-                if (!first) std::cout << ", ";
-                std::cout << symbol;
-                first = false;
+        std::cout << "FIRST Sets:" << std::endl;
+        for (const auto& pair : firstSets) {
+            std::cout << "FIRST(" << pair.first << ") = { ";
+            for (const std::string& symbol : pair.second) {
+                std::cout << symbol << " ";
             }
-            std::cout << " }" << std::endl;
+            std::cout << "}" << std::endl;
         }
     }
 
-    // 打印FOLLOW集合
     void printFollowSets() {
-        std::cout << "=== FOLLOW 集合 ===" << std::endl;
-        for (const auto& entry : followSets) {
-            std::cout << "FOLLOW(" << entry.first << ") = { ";
-            bool first = true;
-            for (const std::string& symbol : entry.second) {
-                if (!first) std::cout << ", ";
-                std::cout << symbol;
-                first = false;
+        std::cout << "FOLLOW Sets:" << std::endl;
+        for (const auto& pair : followSets) {
+            std::cout << "FOLLOW(" << pair.first << ") = { ";
+            for (const std::string& symbol : pair.second) {
+                std::cout << symbol << " ";
             }
-            std::cout << " }" << std::endl;
+            std::cout << "}" << std::endl;
         }
     }
 }
