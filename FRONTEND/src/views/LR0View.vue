@@ -11,40 +11,21 @@
         <div class="input-section">
           <div class="input-group">
             <label for="grammar">文法规则</label>
-            <textarea
-              id="grammar"
-              v-model="grammarInput"
-              placeholder="请输入文法规则，例如：&#10;S -> A B&#10;A -> a&#10;B -> b"
-              rows="8"
-              :disabled="store.isLoading"
-            ></textarea>
+            <textarea id="grammar" v-model="grammarInput" placeholder="请输入文法规则，例如：&#10;S -> A B&#10;A -> a&#10;B -> b"
+              rows="8" :disabled="store.isLoading"></textarea>
           </div>
 
           <div class="input-group">
             <label for="input">输入字符串</label>
-            <input
-              id="input"
-              v-model="inputString"
-              type="text"
-              placeholder="请输入待分析的字符串"
-              :disabled="store.isLoading"
-            />
+            <input id="input" v-model="inputString" type="text" placeholder="请输入待分析的字符串" :disabled="store.isLoading" />
           </div>
 
           <div class="actions">
-            <button
-              @click="handleParse"
-              :disabled="!canParse || store.isLoading"
-              class="btn-primary"
-            >
+            <button @click="handleParse" :disabled="!canParse || store.isLoading" class="btn-primary">
               <span v-if="store.isLoading" class="loading-spinner"></span>
               {{ store.isLoading ? '分析中...' : '开始分析' }}
             </button>
-            <button
-              @click="handleClear"
-              :disabled="store.isLoading"
-              class="btn-secondary"
-            >
+            <button @click="handleClear" :disabled="store.isLoading" class="btn-secondary">
               清空
             </button>
           </div>
@@ -68,28 +49,16 @@
 
             <!-- 标签页导航 -->
             <div class="tab-navigation">
-              <button
-                @click="activeTab = 'steps'"
-                :class="['tab-btn', { active: activeTab === 'steps' }]"
-              >
+              <button @click="activeTab = 'steps'" :class="['tab-btn', { active: activeTab === 'steps' }]">
                 解析步骤
               </button>
-              <button
-                @click="activeTab = 'table'"
-                :class="['tab-btn', { active: activeTab === 'table' }]"
-              >
+              <button @click="activeTab = 'table'" :class="['tab-btn', { active: activeTab === 'table' }]">
                 分析表
               </button>
-              <button
-                @click="activeTab = 'diagram'"
-                :class="['tab-btn', { active: activeTab === 'diagram' }]"
-              >
+              <button @click="activeTab = 'diagram'" :class="['tab-btn', { active: activeTab === 'diagram' }]">
                 状态图
               </button>
-              <button
-                @click="activeTab = 'productions'"
-                :class="['tab-btn', { active: activeTab === 'productions' }]"
-              >
+              <button @click="activeTab = 'productions'" :class="['tab-btn', { active: activeTab === 'productions' }]">
                 产生式
               </button>
             </div>
@@ -112,7 +81,7 @@
                     </thead>
                     <tbody>
                       <tr v-for="step in store.lr0Result.parseSteps" :key="step.step"
-                          :class="{ 'error-step': step.action.includes('error'), 'accept-step': step.action === 'accept' }">
+                        :class="{ 'error-step': step.action.includes('error'), 'accept-step': step.action === 'accept' }">
                         <td>{{ step.step }}</td>
                         <td class="monospace">{{ step.stateStack }}</td>
                         <td class="monospace">{{ step.symbolStack }}</td>
@@ -129,7 +98,8 @@
                 <h4>LR0分析表</h4>
 
                 <!-- 调试信息 -->
-                <div v-if="false" class="debug-info" style="background: #f0f0f0; padding: 10px; margin: 10px 0; font-size: 12px;">
+                <div v-if="false" class="debug-info"
+                  style="background: #f0f0f0; padding: 10px; margin: 10px 0; font-size: 12px;">
                   <p>Headers: {{ store.lr0Result?.parseTable?.headers }}</p>
                   <p>Terminal Headers: {{ getTerminalHeaders() }}</p>
                   <p>Nonterminal Headers: {{ getNonterminalHeaders() }}</p>
@@ -153,12 +123,13 @@
                       <tr v-for="row in store.lr0Result.parseTable.rows" :key="row.state">
                         <td class="state-cell">{{ row.state }}</td>
                         <td v-for="terminal in getTerminalHeaders()" :key="'action-' + row.state + '-' + terminal"
-                            :class="getTableCellClass(row.actions?.[terminal])">
+                          :class="getTableCellClass(row.actions?.[terminal])">
                           {{ row.actions?.[terminal] || '' }}
                         </td>
-                        <td v-for="nonterminal in getNonterminalHeaders()" :key="'goto-' + row.state + '-' + nonterminal"
-                            class="goto-cell">
-                          {{ row.gotos?.[nonterminal] !== undefined && row.gotos?.[nonterminal] !== null && row.gotos?.[nonterminal] !== -1 ? row.gotos[nonterminal] : '' }}
+                        <td v-for="nonterminal in getNonterminalHeaders()"
+                          :key="'goto-' + row.state + '-' + nonterminal" class="goto-cell">
+                          {{ row.gotos?.[nonterminal] !== undefined && row.gotos?.[nonterminal] !== null &&
+                            row.gotos?.[nonterminal] !== -1 ? row.gotos[nonterminal] : '' }}
                         </td>
                       </tr>
                     </tbody>
@@ -181,13 +152,12 @@
               <!-- 产生式 -->
               <div v-if="activeTab === 'productions'" class="productions">
                 <h4>文法产生式</h4>
-                <div v-if="store.lr0Result.productions && Object.keys(store.lr0Result.productions).length" class="production-list">
-                  <template v-for="([left, rightsList], leftIndex) in Object.entries(store.lr0Result.productions)" :key="left">
-                    <div
-                      v-for="(rights, rightIndex) in rightsList"
-                      :key="`${left}-${rightIndex}`"
-                      class="production-item"
-                    >
+                <div v-if="store.lr0Result.productions && Object.keys(store.lr0Result.productions).length"
+                  class="production-list">
+                  <template v-for="([left, rightsList], leftIndex) in Object.entries(store.lr0Result.productions)"
+                    :key="left">
+                    <div v-for="(rights, rightIndex) in rightsList" :key="`${left}-${rightIndex}`"
+                      class="production-item">
                       <span class="production-number">{{ leftIndex * 10 + rightIndex }}:</span>
                       <strong class="production-left">{{ left }}</strong>
                       <span class="production-arrow">→</span>
@@ -240,7 +210,15 @@ const handleParse = async () => {
   if (!canParse.value) return
 
   try {
-    await store.parseLR0(grammarInput.value.trim(), inputString.value.trim())
+    // 智能处理输入字符串，在符号之间添加空格
+    const processedInput = inputString.value.trim()
+      .replace(/([a-zA-Z0-9])\s*([+\-*/()=])/g, '$1 $2') // 字母数字和操作符之间加空格
+      .replace(/([+\-*/()=])\s*([a-zA-Z0-9])/g, '$1 $2') // 操作符和字母数字之间加空格
+      .replace(/([+\-*/()=])\s*([+\-*/()=])/g, '$1 $2') // 操作符之间加空格
+      .replace(/\s+/g, ' ') // 清理多余空格
+      .trim()
+
+    await store.parseLR0(grammarInput.value.trim(), processedInput)
   } catch (error) {
     // 错误已经在store中处理
   }
@@ -455,8 +433,13 @@ onMounted(() => {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .result-section {
@@ -595,21 +578,25 @@ onMounted(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.steps-table, .analysis-table {
+.steps-table,
+.analysis-table {
   width: 100%;
   border-collapse: collapse;
   font-family: 'Fira Code', monospace;
   font-size: 0.85rem;
 }
 
-.steps-table th, .analysis-table th,
-.steps-table td, .analysis-table td {
+.steps-table th,
+.analysis-table th,
+.steps-table td,
+.analysis-table td {
   padding: 0.75rem;
   text-align: center;
   border: 1px solid #e1e8ed;
 }
 
-.steps-table th, .analysis-table th {
+.steps-table th,
+.analysis-table th {
   background: #f8f9fa;
   font-weight: 600;
   color: #2c3e50;
@@ -732,12 +719,15 @@ onMounted(() => {
     font-size: 0.9rem;
   }
 
-  .steps-table, .analysis-table {
+  .steps-table,
+  .analysis-table {
     font-size: 0.75rem;
   }
 
-  .steps-table th, .analysis-table th,
-  .steps-table td, .analysis-table td {
+  .steps-table th,
+  .analysis-table th,
+  .steps-table td,
+  .analysis-table td {
     padding: 0.5rem;
   }
 }

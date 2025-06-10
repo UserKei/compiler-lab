@@ -515,9 +515,14 @@ namespace Parser {
     void parseInputString(const std::vector<std::map<std::string, std::string>>& actionTable,
         const std::vector<std::map<std::string, int>>& gotoTable,
         const std::string& inputString) {
-        std::string processedInput = inputString;
-        // 确保输入字符串以#结尾
-        if (processedInput[processedInput.size() - 1] != '#') processedInput.push_back('#');
+        // 分词处理输入字符串
+        std::vector<std::string> inputTokens;
+        std::istringstream iss(inputString);
+        std::string token;
+        while (iss >> token) {
+            inputTokens.push_back(token);
+        }
+        inputTokens.push_back("#");
 
         std::vector<int> stateStack;      // 状态栈
         std::vector<std::string> symbolStack; // 符号栈
@@ -544,7 +549,20 @@ namespace Parser {
 
         while (true) {
             int currentState = tempStateStack.back();
-            std::string currentSymbol(1, processedInput[tempInputPosition]);
+            
+            // 检查输入索引是否越界
+            if (tempInputPosition >= inputTokens.size()) {
+                ParseStep step;
+                step.step = tempStepNumber;
+                step.stateStack = "";
+                step.symbolStack = "";
+                step.remainingInput = "";
+                step.action = "error (unexpected end of input)";
+                allSteps.push_back(step);
+                break;
+            }
+            
+            std::string currentSymbol = inputTokens[tempInputPosition];
             
             // 构建显示字符串
             std::string stateStackString, symbolStackString;
@@ -555,7 +573,14 @@ namespace Parser {
             step.step = tempStepNumber;
             step.stateStack = stateStackString;
             step.symbolStack = symbolStackString;
-            step.remainingInput = processedInput.substr(tempInputPosition);
+            
+            // 构建剩余输入字符串
+            std::string remainingInput;
+            for (int i = tempInputPosition; i < inputTokens.size(); i++) {
+                remainingInput += inputTokens[i];
+                if (i < inputTokens.size() - 1) remainingInput += " ";
+            }
+            step.remainingInput = remainingInput;
 
             // 检查终结符
             if (std::find(Grammar::terminalSymbols.begin(), Grammar::terminalSymbols.end(), currentSymbol) == Grammar::terminalSymbols.end()) {
@@ -1103,11 +1128,14 @@ namespace LR0Parser {
             // 3. 构建分析表
             LR0Analyzer::buildParseTables(canonicalCollection, actionTable, gotoTable);
             
-            // 4. 准备输入字符串
-            std::string processedInput = input;
-            if (!processedInput.empty() && processedInput.back() != '#') {
-                processedInput.push_back('#');
+            // 4. 准备输入字符串 - 分词处理
+            std::vector<std::string> inputTokens;
+            std::istringstream iss(input);
+            std::string token;
+            while (iss >> token) {
+                inputTokens.push_back(token);
             }
+            inputTokens.push_back("#");
             
             // 5. 执行解析过程
             std::vector<int> stateStack;
@@ -1122,7 +1150,28 @@ namespace LR0Parser {
             
             while (true) {
                 int currentState = stateStack.back();
-                std::string currentSymbol(1, processedInput[inputPosition]);
+                
+                // 检查输入索引是否越界
+                if (inputPosition >= inputTokens.size()) {
+                    ParseStep step;
+                    step.step = stepNumber;
+                    std::string stateStackString, symbolStackString;
+                    for (int state : stateStack) {
+                        stateStackString += std::to_string(state) + " ";
+                    }
+                    for (const auto& symbol : symbolStack) {
+                        symbolStackString += symbol + " ";
+                    }
+                    step.stateStack = stateStackString;
+                    step.symbolStack = symbolStackString;
+                    step.remainingInput = "";
+                    step.action = "error (unexpected end of input)";
+                    parseSteps.push_back(step);
+                    result.isAccepted = false;
+                    break;
+                }
+                
+                std::string currentSymbol = inputTokens[inputPosition];
                 
                 // 构建状态栈和符号栈字符串
                 std::string stateStackString, symbolStackString;
@@ -1137,7 +1186,14 @@ namespace LR0Parser {
                 step.step = stepNumber;
                 step.stateStack = stateStackString;
                 step.symbolStack = symbolStackString;
-                step.remainingInput = processedInput.substr(inputPosition);
+                
+                // 构建剩余输入字符串
+                std::string remainingInput;
+                for (int i = inputPosition; i < inputTokens.size(); i++) {
+                    remainingInput += inputTokens[i];
+                    if (i < inputTokens.size() - 1) remainingInput += " ";
+                }
+                step.remainingInput = remainingInput;
                 
                 // 检查终结符是否合法
                 if (std::find(Grammar::terminalSymbols.begin(), Grammar::terminalSymbols.end(), currentSymbol) == Grammar::terminalSymbols.end()) {

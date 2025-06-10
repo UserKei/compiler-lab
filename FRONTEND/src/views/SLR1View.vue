@@ -61,9 +61,9 @@
         <!-- 标签页内容 -->
         <div class="tab-content">
           <!-- 分析步骤 -->
-          <div v-if="activeTab === 'steps'" class="steps-section">
-            <h3>解析步骤</h3>
-            <div class="table-wrapper">
+          <div v-if="activeTab === 'steps'" class="parse-steps-table">
+            <h4>解析步骤</h4>
+            <div class="table-container">
               <table class="steps-table">
                 <thead>
                   <tr>
@@ -75,20 +75,16 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="step in slr1Result?.parseSteps" :key="step.step" :class="getStepClass(step.action)">
+                  <tr v-for="step in slr1Result?.parseSteps" :key="step.step"
+                      :class="{ 'error-step': step.action.includes('错误') || step.action === 'error', 'accept-step': step.action === 'accept' }">
                     <td>{{ step.step }}</td>
                     <td class="monospace">{{ step.stateStack }}</td>
                     <td class="monospace">{{ step.symbolStack }}</td>
                     <td class="monospace">{{ step.remainingInput }}</td>
-                    <td class="monospace action" :class="getActionClass(step.action)">{{ step.action }}</td>
+                    <td class="action-cell" :class="getActionClass(step.action)">{{ step.action }}</td>
                   </tr>
                 </tbody>
               </table>
-              <div v-if="hasSLR1Result" class="parse-result-summary">
-                <span :class="isSLR1Success && slr1Result?.isAccepted ? 'accept-action' : 'error-action'">
-                  {{ isSLR1Success && slr1Result?.isAccepted ? 'accept' : 'reject' }}
-                </span>
-              </div>
             </div>
           </div>
 
@@ -220,18 +216,19 @@ const clearResults = () => {
 }
 
 const getStepClass = (action: string) => {
-  if (action === 'acc') return 'accept-step'
-  if (action.startsWith('s')) return 'shift-step'
-  if (action.startsWith('r')) return 'reduce-step'
-  if (action.includes('错误')) return 'error-step'
+  if (action === 'accept') return 'accept-step'
+  if (action.startsWith('shift')) return 'shift-step'
+  if (action.startsWith('reduce')) return 'reduce-step'
+  if (action.includes('错误') || action === 'error') return 'error-step'
   return ''
 }
 
 const getActionClass = (action: string) => {
   if (!action) return ''
-  if (action === 'acc') return 'accept-action'
-  if (action.toString().startsWith('s')) return 'shift-action'
-  if (action.toString().startsWith('r')) return 'reduce-action'
+  if (action === 'accept') return 'accept-action'
+  if (action.startsWith('shift')) return 'shift-action'
+  if (action.startsWith('reduce')) return 'reduce-action'
+  if (action === 'error' || action.includes('错误')) return 'error-action'
   return 'goto-action'
 }
 
@@ -529,6 +526,77 @@ const handleCellClick = (state: number, symbol: string, action: string | number)
 
 .steps-table tr.error-step {
   background: #ffeaea;
+}
+
+/* 覆盖 SLR1 步骤表格样式，与 LR0 保持一致 */
+.parse-steps-table h4 {
+  margin: 0 0 1rem 0;
+  color: #2c3e50;
+}
+
+.table-container {
+  overflow-x: auto;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.parse-steps-table .steps-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.85rem;
+}
+
+.parse-steps-table .steps-table th,
+.parse-steps-table .steps-table td {
+  padding: 0.75rem;
+  text-align: center;
+  border: 1px solid #e1e8ed;
+}
+
+.parse-steps-table .steps-table th {
+  background: #f8f9fa;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.parse-steps-table .steps-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.parse-steps-table .monospace {
+  font-family: 'Fira Code', monospace;
+}
+
+/* 解析步骤行样式 */
+.parse-steps-table .error-step {
+  background-color: #fee !important;
+}
+
+.parse-steps-table .accept-step {
+  background-color: #eef !important;
+}
+
+/* 动作单元格样式 */
+.parse-steps-table .action-cell {
+  font-weight: 600;
+}
+
+.parse-steps-table .error-action {
+  color: #e74c3c;
+}
+
+.parse-steps-table .accept-action {
+  color: #27ae60;
+}
+
+.parse-steps-table .shift-action {
+  color: #3498db;
+}
+
+.parse-steps-table .reduce-action {
+  color: #d97706;
 }
 
 .action.accept-action {

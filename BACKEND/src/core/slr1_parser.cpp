@@ -653,7 +653,29 @@ namespace SLR1Parser {
             }
 
             std::string action = actionTable[currentState][currentSymbol];
-            parseStep.action = action;
+            
+            // 格式化动作显示，与LR0保持一致
+            std::string formattedAction;
+            if (action == "acc") {
+                formattedAction = "accept";
+            } else if (action.empty()) {
+                formattedAction = "error";
+            } else if (action[0] == 's') {
+                int nextState = std::stoi(action.substr(1));
+                formattedAction = "shift " + std::to_string(nextState);
+            } else if (action[0] == 'r') {
+                int productionIndex = std::stoi(action.substr(1));
+                std::string leftSide = Grammar_SLR1::productionLeftSides[productionIndex];
+                std::vector<std::string> rightSide = Grammar_SLR1::productionRightSides[productionIndex];
+                formattedAction = "reduce " + leftSide + "->";
+                for (const std::string& symbol : rightSide) {
+                    formattedAction += symbol;
+                }
+            } else {
+                formattedAction = action;
+            }
+            
+            parseStep.action = formattedAction;
             result.parseSteps.push_back(parseStep);
 
             if (action == "acc") {
@@ -722,6 +744,9 @@ namespace SLR1Parser {
         }
         result.productions = productionMap;
 
+        // 生成DOT文件内容
+        result.dotFile = generateDotFile();
+
         return result;
     }
 
@@ -743,17 +768,74 @@ namespace SLR1Parser {
         std::ostringstream dot;
         dot << "digraph SLR1_Automaton {" << std::endl;
         dot << "  rankdir=LR;" << std::endl;
-        dot << "  node [shape=box];" << std::endl;
+        dot << "  node [shape=box, style=rounded];" << std::endl;
 
         // 为每个状态生成节点
         for (int i = 0; i < canonicalCollection.size(); ++i) {
             dot << "  I" << i << " [label=\"I" << i << "\\n";
             
             // 添加项目
-            // 这里需要转换ItemSet_SLR1::LRItem到字符串
-            // 暂时简化处理
+            for (const auto& item : canonicalCollection[i]) {
+                std::string leftSide = Grammar_SLR1::productionLeftSides[item.productionIndex];
+                const std::vector<std::string>& rightSide = Grammar_SLR1::productionRightSides[item.productionIndex];
+                
+                dot << leftSide << " -> ";
+                for (int j = 0; j < rightSide.size(); ++j) {
+                    if (j == item.dotPosition) dot << ". ";
+                    dot << rightSide[j] << " ";
+                }
+                if (item.dotPosition == rightSide.size()) dot << ". ";
+                dot << "\\n";
+            }
             dot << "\"];" << std::endl;
         }
+
+        dot << std::endl;
+
+        // 生成状态转换边
+        for (int stateIndex = 0; stateIndex < canonicalCollection.size(); stateIndex++) {
+            // 处理终结符转换（shift 动作）
+            for (const std::string& terminal : Grammar_SLR1::terminalSymbols) {
+                if (terminal == "#") continue;  // 跳过结束符
+
+                auto actionIter = actionTable[stateIndex].find(terminal);
+                if (actionIter != actionTable[stateIndex].end()) {
+                    std::string action = actionIter->second;
+                    if (!action.empty() && action[0] == 's') {
+                        int targetState = std::stoi(action.substr(1));
+                        dot << "  I" << stateIndex << " -> I" << targetState
+                            << " [label=\"" << terminal << "\"];" << std::endl;
+                    }
+                }
+            }
+
+            // 处理非终结符转换（GOTO）
+            for (const std::string& nonterminal : Grammar_SLR1::nonterminalSymbols) {
+                if (nonterminal.find("'") != std::string::npos) continue; // 跳过拓广开始符号
+                
+                auto gotoIter = gotoTable[stateIndex].find(nonterminal);
+                if (gotoIter != gotoTable[stateIndex].end()) {
+                    int targetState = gotoIter->second;
+                    if (targetState != -1) {
+                        dot << "  I" << stateIndex << " -> I" << targetState
+                            << " [label=\"" << nonterminal << "\", style=dashed];" << std::endl;
+                    }
+                }
+            }
+        }
+
+        // 标记接受状态
+        for (int stateIndex = 0; stateIndex < actionTable.size(); stateIndex++) {
+            for (const auto& pair : actionTable[stateIndex]) {
+                if (pair.second == "acc") {
+                    dot << "  I" << stateIndex << " [style=\"filled,rounded\", fillcolor=lightgreen];" << std::endl;
+                    break;
+                }
+            }
+        }
+
+        // 标记初始状态I0
+        dot << "  I0 [style=\"rounded,filled\", fillcolor=lightblue];" << std::endl;
 
         dot << "}" << std::endl;
         return dot.str();
