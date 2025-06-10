@@ -25,6 +25,12 @@ export interface ParseTable {
   rows: ParseTableRow[]
 }
 
+export interface Production {
+  index: number
+  leftSide: string
+  rightSide: string[]
+}
+
 export interface LR0ParseResponse {
   success: boolean
   message: string
@@ -33,6 +39,7 @@ export interface LR0ParseResponse {
   parseTable: ParseTable
   svgDiagram: string
   productions: Record<string, string[][]>
+  productionList: Production[]
 }
 
 export interface SLR1ParseRequest {
@@ -48,6 +55,7 @@ export interface SLR1ParseResponse {
   parseTable: ParseTable
   svgDiagram: string
   productions: Record<string, string[][]>
+  productionList: Production[]
   firstSets: Record<string, string[]>
   followSets: Record<string, string[]>
 }

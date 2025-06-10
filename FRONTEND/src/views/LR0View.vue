@@ -152,7 +152,22 @@
               <!-- 产生式 -->
               <div v-if="activeTab === 'productions'" class="productions">
                 <h4>文法产生式</h4>
-                <div v-if="store.lr0Result.productions && Object.keys(store.lr0Result.productions).length"
+                <div v-if="store.lr0Result.productionList && store.lr0Result.productionList.length"
+                  class="production-list">
+                  <div v-for="production in store.lr0Result.productionList" :key="production.index"
+                    class="production-item">
+                    <span class="production-number">{{ production.index }}:</span>
+                    <strong class="production-left">{{ production.leftSide }}</strong>
+                    <span class="production-arrow">→</span>
+                    <span class="production-right">
+                      <span v-for="(symbol, idx) in production.rightSide" :key="idx" class="right-symbol">
+                        {{ symbol }}
+                      </span>
+                    </span>
+                  </div>
+                </div>
+                <!-- 备用显示（如果productionList不可用，回退到原来的格式） -->
+                <div v-else-if="store.lr0Result.productions && Object.keys(store.lr0Result.productions).length"
                   class="production-list">
                   <template v-for="([left, rightsList], leftIndex) in Object.entries(store.lr0Result.productions)"
                     :key="left">
@@ -708,6 +723,29 @@ onMounted(() => {
   min-height: 300px;
 }
 
+.connection-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-top: 2rem;
+}
+
+.status-indicator {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.connected {
+  color: #27ae60;
+}
+
+.disconnected {
+  color: #e74c3c;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .tab-navigation {
@@ -729,6 +767,11 @@ onMounted(() => {
   .steps-table td,
   .analysis-table td {
     padding: 0.5rem;
+  }
+
+  .connection-status {
+    flex-direction: column;
+    gap: 1rem;
   }
 }
 </style>

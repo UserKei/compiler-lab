@@ -170,6 +170,24 @@ namespace APIHandlers {
                 productions[prod.first] = std::move(rightSides);
             }
             response["productions"] = std::move(productions);
+
+            // 按序号排列的产生式列表
+            crow::json::wvalue productionList(crow::json::type::List);
+            for (size_t i = 0; i < result.productionList.size(); ++i) {
+                const auto& prod = result.productionList[i];
+                crow::json::wvalue prodJson;
+                prodJson["index"] = prod.index;
+                prodJson["leftSide"] = prod.leftSide;
+                
+                crow::json::wvalue rightSide(crow::json::type::List);
+                for (size_t j = 0; j < prod.rightSide.size(); ++j) {
+                    rightSide[j] = prod.rightSide[j];
+                }
+                prodJson["rightSide"] = std::move(rightSide);
+                
+                productionList[i] = std::move(prodJson);
+            }
+            response["productionList"] = std::move(productionList);
             
             auto endTime = std::chrono::steady_clock::now();
             auto totalDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
@@ -300,6 +318,24 @@ namespace APIHandlers {
                 productions[prod.first] = std::move(rightSides);
             }
             response["productions"] = std::move(productions);
+
+            // 按序号排列的产生式列表
+            crow::json::wvalue productionList(crow::json::type::List);
+            for (size_t i = 0; i < result.productionList.size(); ++i) {
+                const auto& prod = result.productionList[i];
+                crow::json::wvalue prodJson;
+                prodJson["index"] = prod.index;
+                prodJson["leftSide"] = prod.leftSide;
+                
+                crow::json::wvalue rightSide(crow::json::type::List);
+                for (size_t j = 0; j < prod.rightSide.size(); ++j) {
+                    rightSide[j] = prod.rightSide[j];
+                }
+                prodJson["rightSide"] = std::move(rightSide);
+                
+                productionList[i] = std::move(prodJson);
+            }
+            response["productionList"] = std::move(productionList);
             
             // FIRST集合
             crow::json::wvalue firstSets;

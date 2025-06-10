@@ -585,7 +585,67 @@ namespace SLR1Parser {
         return follow;
     }
 
-    // 解析输入字符串
+    // 构建解析表（独立于输入分析）
+    ParseResult buildParseTable() {
+        ParseResult result;
+        result.success = false;
+        result.isAccepted = false;
+
+        if (canonicalCollection.empty()) {
+            result.message = "语法未初始化";
+            return result;
+        }
+
+        // 构建分析表结构
+        result.parseTable.headers.push_back("状态");
+        for (const std::string& terminal : Grammar_SLR1::terminalSymbols) {
+            result.parseTable.headers.push_back(terminal);
+        }
+        for (const std::string& nonterminal : Grammar_SLR1::nonterminalSymbols) {
+            if (nonterminal.find("'") == std::string::npos) {  // 排除拓广开始符号
+                result.parseTable.headers.push_back(nonterminal);
+            }
+        }
+
+        for (int i = 0; i < actionTable.size(); ++i) {
+            ParseTableRow row;
+            row.state = i;
+            row.actions = actionTable[i];
+            row.gotos = gotoTable[i];
+            result.parseTable.rows.push_back(row);
+        }
+
+        // 设置其他信息
+        result.firstSets = firstSets;
+        result.followSets = followSets;
+
+        // 构建产生式信息
+        std::map<std::string, std::vector<std::vector<std::string>>> productionMap;
+        for (int i = 0; i < Grammar_SLR1::productionLeftSides.size(); ++i) {
+            productionMap[Grammar_SLR1::productionLeftSides[i]].push_back(Grammar_SLR1::productionRightSides[i]);
+        }
+        result.productions = productionMap;
+
+        // 构建按序号排列的产生式列表
+        result.productionList.clear();
+        for (int i = 0; i < Grammar_SLR1::productionLeftSides.size(); ++i) {
+            Production prod;
+            prod.index = i;
+            prod.leftSide = Grammar_SLR1::productionLeftSides[i];
+            prod.rightSide = Grammar_SLR1::productionRightSides[i];
+            result.productionList.push_back(prod);
+        }
+
+        // 生成DOT文件内容
+        result.dotFile = generateDotFile();
+
+        result.success = true;
+        result.message = "解析表构建成功";
+        
+        return result;
+    }
+
+    // 解析输入字符串（使用已构建的解析表）
     ParseResult parseInput(const std::string& input) {
         ParseResult result;
         result.success = false;
@@ -595,6 +655,49 @@ namespace SLR1Parser {
             result.message = "语法未初始化";
             return result;
         }
+
+        // 先构建解析表信息（确保无论输入分析是否成功都有表可显示）
+        result.parseTable.headers.push_back("状态");
+        for (const std::string& terminal : Grammar_SLR1::terminalSymbols) {
+            result.parseTable.headers.push_back(terminal);
+        }
+        for (const std::string& nonterminal : Grammar_SLR1::nonterminalSymbols) {
+            if (nonterminal.find("'") == std::string::npos) {  // 排除拓广开始符号
+                result.parseTable.headers.push_back(nonterminal);
+            }
+        }
+
+        for (int i = 0; i < actionTable.size(); ++i) {
+            ParseTableRow row;
+            row.state = i;
+            row.actions = actionTable[i];
+            row.gotos = gotoTable[i];
+            result.parseTable.rows.push_back(row);
+        }
+
+        // 设置其他信息
+        result.firstSets = firstSets;
+        result.followSets = followSets;
+
+        // 构建产生式信息
+        std::map<std::string, std::vector<std::vector<std::string>>> productionMap;
+        for (int i = 0; i < Grammar_SLR1::productionLeftSides.size(); ++i) {
+            productionMap[Grammar_SLR1::productionLeftSides[i]].push_back(Grammar_SLR1::productionRightSides[i]);
+        }
+        result.productions = productionMap;
+
+        // 构建按序号排列的产生式列表
+        result.productionList.clear();
+        for (int i = 0; i < Grammar_SLR1::productionLeftSides.size(); ++i) {
+            Production prod;
+            prod.index = i;
+            prod.leftSide = Grammar_SLR1::productionLeftSides[i];
+            prod.rightSide = Grammar_SLR1::productionRightSides[i];
+            result.productionList.push_back(prod);
+        }
+
+        // 生成DOT文件内容
+        result.dotFile = generateDotFile();
 
         // 准备输入串
         std::vector<std::string> inputTokens;
@@ -649,6 +752,7 @@ namespace SLR1Parser {
                 parseStep.action = "错误";
                 result.parseSteps.push_back(parseStep);
                 result.message = "分析错误：无法找到对应的动作";
+                result.success = true;  // 仍然设置为成功，因为解析表已构建
                 return result;
             }
 
@@ -685,6 +789,7 @@ namespace SLR1Parser {
                 break;
             } else if (action.empty()) {
                 result.message = "分析错误：空动作";
+                result.success = true;  // 仍然设置为成功，因为解析表已构建
                 return result;
             } else if (action[0] == 's') {
                 // 移入动作
@@ -710,42 +815,10 @@ namespace SLR1Parser {
                 symbolStack.push_back(leftSide);
             } else {
                 result.message = "分析错误：未知动作";
+                result.success = true;  // 仍然设置为成功，因为解析表已构建
                 return result;
             }
         }
-
-        // 构建分析表
-        result.parseTable.headers.push_back("状态");
-        for (const std::string& terminal : Grammar_SLR1::terminalSymbols) {
-            result.parseTable.headers.push_back(terminal);
-        }
-        for (const std::string& nonterminal : Grammar_SLR1::nonterminalSymbols) {
-            if (nonterminal.find("'") == std::string::npos) {  // 排除拓广开始符号
-                result.parseTable.headers.push_back(nonterminal);
-            }
-        }
-
-        for (int i = 0; i < actionTable.size(); ++i) {
-            ParseTableRow row;
-            row.state = i;
-            row.actions = actionTable[i];
-            row.gotos = gotoTable[i];
-            result.parseTable.rows.push_back(row);
-        }
-
-        // 设置其他信息
-        result.firstSets = firstSets;
-        result.followSets = followSets;
-
-        // 构建产生式信息
-        std::map<std::string, std::vector<std::vector<std::string>>> productionMap;
-        for (int i = 0; i < Grammar_SLR1::productionLeftSides.size(); ++i) {
-            productionMap[Grammar_SLR1::productionLeftSides[i]].push_back(Grammar_SLR1::productionRightSides[i]);
-        }
-        result.productions = productionMap;
-
-        // 生成DOT文件内容
-        result.dotFile = generateDotFile();
 
         return result;
     }

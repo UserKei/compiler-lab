@@ -41,6 +41,13 @@ namespace LR0Parser {
         std::vector<ParseTableRow> rows;
     };
     
+    // 单个产生式结构（包含序号）
+    struct Production {
+        int index;
+        std::string leftSide;
+        std::vector<std::string> rightSide;
+    };
+
     // 解析相关
     struct ParseResult {
         bool success;
@@ -49,9 +56,14 @@ namespace LR0Parser {
         ParseTable parseTable;
         std::string dotFile;
         bool isAccepted;
-        std::map<std::string, std::vector<std::vector<std::string>>> productions;
+        std::map<std::string, std::vector<std::vector<std::string>>> productions; // 保留原有格式用于兼容
+        std::vector<Production> productionList; // 新增：按序号排列的产生式列表
     };
     
+    // 构建解析表（独立于输入分析）
+    ParseResult buildParseTable();
+    
+    // 解析输入字符串（使用已构建的解析表）
     ParseResult parseInput(const std::string& input);
     
     // 生成DOT文件

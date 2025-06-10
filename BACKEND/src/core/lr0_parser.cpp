@@ -1112,6 +1112,111 @@ namespace LR0Parser {
         return Grammar::getProductionRightSides();
     }
     
+    // 构建解析表（独立于输入分析）
+    ParseResult buildParseTable() {
+        ParseResult result;
+        
+        try {
+            // 1. 构建LR(0)项目集
+            std::vector<std::vector<ItemSet::LRItem>> canonicalCollection = LR0Analyzer::buildAllItemSets();
+            int numberOfStates = canonicalCollection.size();
+            
+            // 2. 初始化分析表
+            std::vector<std::map<std::string, std::string>> actionTable;
+            std::vector<std::map<std::string, int>> gotoTable;
+            LR0Analyzer::initializeParseTables(actionTable, gotoTable, numberOfStates);
+            
+            // 3. 构建分析表
+            LR0Analyzer::buildParseTables(canonicalCollection, actionTable, gotoTable);
+            
+            // 4. 构建分析表结构
+            result.parseTable.headers.clear();
+            result.parseTable.headers.push_back("State");
+            
+            // 添加终结符列
+            for (const std::string& terminal : Grammar::terminalSymbols) {
+                result.parseTable.headers.push_back(terminal);
+            }
+            
+            // 添加非终结符列（排除拓广开始符号）
+            for (const std::string& nonterminal : Grammar::nonterminalSymbols) {
+                // 排除拓广开始符号（以'结尾的符号）
+                if (nonterminal.length() > 0 && nonterminal.back() != '\'') {
+                    result.parseTable.headers.push_back(nonterminal);
+                }
+            }
+            
+            // 填充分析表行
+            for (int i = 0; i < numberOfStates; i++) {
+                ParseTableRow row;
+                row.state = i;
+                
+                // 填充ACTION部分
+                for (const std::string& terminal : Grammar::terminalSymbols) {
+                    auto it = actionTable[i].find(terminal);
+                    if (it != actionTable[i].end() && !it->second.empty()) {
+                        row.actions[terminal] = it->second;
+                    } else {
+                        row.actions[terminal] = "";
+                    }
+                }
+                
+                // 填充GOTO部分（排除拓广开始符号）
+                for (const std::string& nonterminal : Grammar::nonterminalSymbols) {
+                    // 排除拓广开始符号（以'结尾的符号）
+                    if (nonterminal.length() > 0 && nonterminal.back() != '\'') {
+                        auto it = gotoTable[i].find(nonterminal);
+                        if (it != gotoTable[i].end() && it->second != -1) {
+                            row.gotos[nonterminal] = it->second;
+                        }
+                    }
+                }
+                
+                result.parseTable.rows.push_back(row);
+            }
+            
+            // 5. 生成DOT文件内容
+            result.dotFile = generateDotFileContent(canonicalCollection, actionTable, gotoTable);
+            
+            // 6. 获取产生式信息 - 聚合同一左部的所有右部
+            auto leftSides = Grammar::getProductionLeftSides();
+            auto rightSides = Grammar::getProductionRightSides();
+            
+            for (size_t i = 0; i < leftSides.size() && i < rightSides.size(); ++i) {
+                const std::string& leftSide = leftSides[i];
+                const std::vector<std::string>& rightSide = rightSides[i];
+                
+                // 如果这个左部已经存在，添加到现有列表中；否则创建新列表
+                if (result.productions.find(leftSide) == result.productions.end()) {
+                    result.productions[leftSide] = std::vector<std::vector<std::string>>();
+                }
+                result.productions[leftSide].push_back(rightSide);
+            }
+
+            // 构建按序号排列的产生式列表
+            result.productionList.clear();
+            for (size_t i = 0; i < leftSides.size() && i < rightSides.size(); ++i) {
+                Production prod;
+                prod.index = static_cast<int>(i);
+                prod.leftSide = leftSides[i];
+                prod.rightSide = rightSides[i];
+                result.productionList.push_back(prod);
+            }
+            
+            result.success = true;
+            result.message = "解析表构建成功";
+            result.isAccepted = false;  // 构建表阶段不涉及输入接受与否
+            
+        } catch (const std::exception& e) {
+            result.success = false;
+            result.message = "构建解析表时出错: " + std::string(e.what());
+            result.isAccepted = false;
+        }
+        
+        return result;
+    }
+
+    // 解析输入字符串（使用已构建的解析表）
     ParseResult parseInput(const std::string& input) {
         ParseResult result;
         
@@ -1128,7 +1233,81 @@ namespace LR0Parser {
             // 3. 构建分析表
             LR0Analyzer::buildParseTables(canonicalCollection, actionTable, gotoTable);
             
-            // 4. 准备输入字符串 - 分词处理
+            // 4. 先构建分析表结构（确保无论输入分析是否成功都有表可显示）
+            result.parseTable.headers.clear();
+            result.parseTable.headers.push_back("State");
+            
+            // 添加终结符列
+            for (const std::string& terminal : Grammar::terminalSymbols) {
+                result.parseTable.headers.push_back(terminal);
+            }
+            
+            // 添加非终结符列（排除拓广开始符号）
+            for (const std::string& nonterminal : Grammar::nonterminalSymbols) {
+                // 排除拓广开始符号（以'结尾的符号）
+                if (nonterminal.length() > 0 && nonterminal.back() != '\'') {
+                    result.parseTable.headers.push_back(nonterminal);
+                }
+            }
+            
+            // 填充分析表行
+            for (int i = 0; i < numberOfStates; i++) {
+                ParseTableRow row;
+                row.state = i;
+                
+                // 填充ACTION部分
+                for (const std::string& terminal : Grammar::terminalSymbols) {
+                    auto it = actionTable[i].find(terminal);
+                    if (it != actionTable[i].end() && !it->second.empty()) {
+                        row.actions[terminal] = it->second;
+                    } else {
+                        row.actions[terminal] = "";
+                    }
+                }
+                
+                // 填充GOTO部分（排除拓广开始符号）
+                for (const std::string& nonterminal : Grammar::nonterminalSymbols) {
+                    // 排除拓广开始符号（以'结尾的符号）
+                    if (nonterminal.length() > 0 && nonterminal.back() != '\'') {
+                        auto it = gotoTable[i].find(nonterminal);
+                        if (it != gotoTable[i].end() && it->second != -1) {
+                            row.gotos[nonterminal] = it->second;
+                        }
+                    }
+                }
+                
+                result.parseTable.rows.push_back(row);
+            }
+            
+            // 5. 生成DOT文件内容
+            result.dotFile = generateDotFileContent(canonicalCollection, actionTable, gotoTable);
+            
+            // 6. 获取产生式信息 - 聚合同一左部的所有右部
+            auto leftSides = Grammar::getProductionLeftSides();
+            auto rightSides = Grammar::getProductionRightSides();
+            
+            for (size_t i = 0; i < leftSides.size() && i < rightSides.size(); ++i) {
+                const std::string& leftSide = leftSides[i];
+                const std::vector<std::string>& rightSide = rightSides[i];
+                
+                // 如果这个左部已经存在，添加到现有列表中；否则创建新列表
+                if (result.productions.find(leftSide) == result.productions.end()) {
+                    result.productions[leftSide] = std::vector<std::vector<std::string>>();
+                }
+                result.productions[leftSide].push_back(rightSide);
+            }
+
+            // 构建按序号排列的产生式列表
+            result.productionList.clear();
+            for (size_t i = 0; i < leftSides.size() && i < rightSides.size(); ++i) {
+                Production prod;
+                prod.index = static_cast<int>(i);
+                prod.leftSide = leftSides[i];
+                prod.rightSide = rightSides[i];
+                result.productionList.push_back(prod);
+            }
+            
+            // 7. 准备输入字符串 - 分词处理
             std::vector<std::string> inputTokens;
             std::istringstream iss(input);
             std::string token;
@@ -1137,7 +1316,7 @@ namespace LR0Parser {
             }
             inputTokens.push_back("#");
             
-            // 5. 执行解析过程
+            // 8. 执行解析过程
             std::vector<int> stateStack;
             std::vector<std::string> symbolStack;
             stateStack.push_back(0);
@@ -1263,74 +1442,10 @@ namespace LR0Parser {
                 stepNumber++;
             }
             
-            // 6. 构建分析表结构
-            result.parseTable.headers.clear();
-            result.parseTable.headers.push_back("State");
-            
-            // 添加终结符列
-            for (const std::string& terminal : Grammar::terminalSymbols) {
-                result.parseTable.headers.push_back(terminal);
-            }
-            
-            // 添加非终结符列（排除拓广开始符号）
-            for (const std::string& nonterminal : Grammar::nonterminalSymbols) {
-                // 排除拓广开始符号（以'结尾的符号）
-                if (nonterminal.length() > 0 && nonterminal.back() != '\'') {
-                    result.parseTable.headers.push_back(nonterminal);
-                }
-            }
-            
-            // 填充分析表行
-            for (int i = 0; i < numberOfStates; i++) {
-                ParseTableRow row;
-                row.state = i;
-                
-                // 填充ACTION部分
-                for (const std::string& terminal : Grammar::terminalSymbols) {
-                    auto it = actionTable[i].find(terminal);
-                    if (it != actionTable[i].end() && !it->second.empty()) {
-                        row.actions[terminal] = it->second;
-                    } else {
-                        row.actions[terminal] = "";
-                    }
-                }
-                
-                // 填充GOTO部分（排除拓广开始符号）
-                for (const std::string& nonterminal : Grammar::nonterminalSymbols) {
-                    // 排除拓广开始符号（以'结尾的符号）
-                    if (nonterminal.length() > 0 && nonterminal.back() != '\'') {
-                        auto it = gotoTable[i].find(nonterminal);
-                        if (it != gotoTable[i].end() && it->second != -1) {
-                            row.gotos[nonterminal] = it->second;
-                        }
-                    }
-                }
-                
-                result.parseTable.rows.push_back(row);
-            }
-            
-            // 7. 生成DOT文件内容
-            result.dotFile = generateDotFileContent(canonicalCollection, actionTable, gotoTable);
-            
-            // 8. 设置结果
+            // 9. 设置结果
             result.parseSteps = parseSteps;
-            result.success = true;
+            result.success = true;  // 总是设置为成功，因为解析表已构建
             result.message = isAccepted ? "Input accepted" : "Input rejected";
-            
-            // 获取产生式信息 - 聚合同一左部的所有右部
-            auto leftSides = Grammar::getProductionLeftSides();
-            auto rightSides = Grammar::getProductionRightSides();
-            
-            for (size_t i = 0; i < leftSides.size() && i < rightSides.size(); ++i) {
-                const std::string& leftSide = leftSides[i];
-                const std::vector<std::string>& rightSide = rightSides[i];
-                
-                // 如果这个左部已经存在，添加到现有列表中；否则创建新列表
-                if (result.productions.find(leftSide) == result.productions.end()) {
-                    result.productions[leftSide] = std::vector<std::vector<std::string>>();
-                }
-                result.productions[leftSide].push_back(rightSide);
-            }
             
         } catch (const std::exception& e) {
             result.success = false;
