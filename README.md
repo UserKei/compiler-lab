@@ -47,6 +47,7 @@
 
 ### 环境要求
 
+"/opt/homebrew/include"
 - Node.js 16+
 - C++17 编译器 (GCC/Clang)
 - CMake 3.16+
