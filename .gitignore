@@ -49,9 +49,3 @@ Thumbs.db
 # 日志文件
 *.log
 logs/
-
-# 我们删除的不需要的文件
-FRONTEND/src/components/RegexVisualizer.vue
-FRONTEND/src/components/LR0Visualizer.vue
-FRONTEND/src/utils/
-FRONTEND/src/types/index.ts
