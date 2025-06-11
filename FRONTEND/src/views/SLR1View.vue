@@ -105,8 +105,8 @@
                       <thead>
                         <tr>
                           <th rowspan="2" class="state-header">状态</th>
-                          <th colspan="4" class="action-header">ACTION</th>
-                          <th colspan="3" class="goto-header">GOTO</th>
+                          <th :colspan="getTerminals().length" class="action-header">ACTION</th>
+                          <th :colspan="getNonterminals().length" class="goto-header">GOTO</th>
                         </tr>
                         <tr>
                           <th v-for="terminal in getTerminals()" :key="terminal">{{ terminal }}</th>
@@ -282,19 +282,25 @@ const flattenedProductions = computed(() => {
 
 // 从 parseTable 中提取终结符
 const getTerminals = () => {
-  if (!store.slr1Result?.parseTable?.headers) return []
-  // 通常前几个是终结符，这里需要根据实际情况调整
-  return store.slr1Result.parseTable.headers.slice(1).filter(header =>
-    header === '#' || header === 'id' || header === '+' || header === '*' || header === '(' || header === ')'
-  )
+  if (!store.slr1Result?.parseTable?.headers || !store.slr1Result?.parseTable?.rows?.length) return []
+
+  // 从第一行的actions中获取所有终结符的键
+  const firstRow = store.slr1Result.parseTable.rows[0]
+  if (!firstRow?.actions) return []
+
+  return Object.keys(firstRow.actions)
 }
 
 // 从 parseTable 中提取非终结符
 const getNonterminals = () => {
-  if (!store.slr1Result?.parseTable?.headers) return []
-  // 非终结符通常是大写字母开头，且不包含 '
-  return store.slr1Result.parseTable.headers.slice(1).filter(header =>
-    /^[A-Z]/.test(header) && !header.includes("'")
+  if (!store.slr1Result?.parseTable?.headers || !store.slr1Result?.parseTable?.rows?.length) return []
+
+  // 从第一行的gotos中获取所有非终结符的键，排除拓广开始符号
+  const firstRow = store.slr1Result.parseTable.rows[0]
+  if (!firstRow?.gotos) return []
+
+  return Object.keys(firstRow.gotos).filter(key =>
+    !key.includes("'") && !key.includes("''")
   )
 }
 
