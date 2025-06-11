@@ -32,10 +32,33 @@ namespace Grammar_SLR1 {
         return !symbol.empty() && std::isupper(symbol[0]);
     }
 
+    // 标准化epsilon符号：将"epsilon"转换为"ε"
+    std::string normalizeEpsilon(const std::string& symbol) {
+        if (symbol == "epsilon") {
+            return "ε";
+        }
+        return symbol;
+    }
+
+    // 检查是否为epsilon符号（支持两种表示）
+    bool isEpsilon(const std::string& symbol) {
+        return symbol == "epsilon" || symbol == "ε";
+    }
+
     // 解析产生式右部
     std::vector<std::string> parseRightHandSide(const std::string& rhs) {
         std::vector<std::string> symbols;
         std::string currentSymbol;
+
+        // 首先检查是否包含ε字符，如果有则直接按空格分割
+        if (rhs.find("ε") != std::string::npos) {
+            std::istringstream iss(rhs);
+            std::string token;
+            while (iss >> token) {
+                symbols.push_back(normalizeEpsilon(token));
+            }
+            return symbols;
+        }
 
         for (size_t i = 0; i < rhs.size(); ++i) {
             char currentChar = rhs[i];
@@ -43,14 +66,28 @@ namespace Grammar_SLR1 {
             // 跳过空格 - 空格作为符号分隔符
             if (std::isspace(currentChar)) {
                 if (!currentSymbol.empty()) {
-                    symbols.push_back(currentSymbol);
+                    symbols.push_back(normalizeEpsilon(currentSymbol));  // 标准化epsilon
                     currentSymbol.clear();
                 }
                 continue;
             }
 
+            // 处理大写字母 - 每个大写字母是一个独立的非终结符
+            if (std::isupper(currentChar)) {
+                // 先保存之前累积的符号
+                if (!currentSymbol.empty()) {
+                    symbols.push_back(normalizeEpsilon(currentSymbol));
+                    currentSymbol.clear();
+                }
+                // 大写字母作为单独的符号
+                symbols.push_back(std::string(1, currentChar));
+            }
+            // 处理小写字母和数字 - 可以组合成终结符
+            else if (std::islower(currentChar) || std::isdigit(currentChar)) {
+                currentSymbol += currentChar;
+            }
             // 引号内的符号作为一个整体处理
-            if (currentChar == '\'' || currentChar == '"') {
+            else if (currentChar == '\'' || currentChar == '"') {
                 char quoteChar = currentChar;
                 currentSymbol += currentChar;
                 ++i;
@@ -64,14 +101,20 @@ namespace Grammar_SLR1 {
                 if (i < rhs.size()) {
                     currentSymbol += quoteChar;
                 }
-            } else {
-                currentSymbol += currentChar;
+            }
+            // 处理特殊字符和操作符
+            else {
+                if (!currentSymbol.empty()) {
+                    symbols.push_back(normalizeEpsilon(currentSymbol));
+                    currentSymbol.clear();
+                }
+                symbols.push_back(std::string(1, currentChar));
             }
         }
 
         // 添加最后一个符号
         if (!currentSymbol.empty()) {
-            symbols.push_back(currentSymbol);
+            symbols.push_back(normalizeEpsilon(currentSymbol));  // 标准化epsilon
         }
 
         return symbols;
@@ -174,7 +217,7 @@ namespace Grammar_SLR1 {
         // 收集所有右部符号
         for (const std::vector<std::string>& rightSide : productionRightSides) {
             for (const std::string& symbol : rightSide) {
-                if (symbol != "epsilon") {
+                if (!isEpsilon(symbol)) {  // 使用新的isEpsilon函数
                     allSymbolsSet.insert(symbol);
                     // 如果不是非终结符，则为终结符
                     if (nonterminalSet.find(symbol) == nonterminalSet.end()) {
@@ -253,6 +296,11 @@ namespace ItemSet_SLR1 {
     // GOTO函数计算
     std::set<LRItem> computeGoto(const std::set<LRItem>& itemSet, const std::string& symbol) {
         std::set<LRItem> gotoSet;
+
+        // 如果是epsilon，不进行GOTO计算
+        if (Grammar_SLR1::isEpsilon(symbol)) {
+            return gotoSet;  // 返回空集合
+        }
 
         for (const LRItem& item : itemSet) {
             // 检查点后是否有符号且该符号匹配
@@ -371,6 +419,12 @@ namespace SLR1Parser {
                 if (item.dotPosition < production.size()) {
                     // 移入项目
                     std::string nextSymbol = production[item.dotPosition];
+                    
+                    // 如果下一个符号是epsilon，不进行状态转移
+                    if (Grammar_SLR1::isEpsilon(nextSymbol)) {
+                        continue;
+                    }
+                    
                     std::set<ItemSet_SLR1::LRItem> gotoSet = ItemSet_SLR1::computeGoto(canonicalCollection[i], nextSymbol);
 
                     if (!gotoSet.empty()) {
@@ -471,9 +525,9 @@ namespace SLR1Parser {
                 const std::string& leftSide = Grammar_SLR1::productionLeftSides[i];
                 const std::vector<std::string>& rightSide = Grammar_SLR1::productionRightSides[i];
 
-                if (rightSide.size() == 1 && rightSide[0] == "epsilon") {
-                    if (first[leftSide].find("epsilon") == first[leftSide].end()) {
-                        first[leftSide].insert("epsilon");
+                if (rightSide.size() == 1 && Grammar_SLR1::isEpsilon(rightSide[0])) {
+                    if (first[leftSide].find("ε") == first[leftSide].end()) {
+                        first[leftSide].insert("ε");
                         changed = true;
                     }
                     continue;
@@ -482,23 +536,23 @@ namespace SLR1Parser {
                 for (int j = 0; j < rightSide.size(); ++j) {
                     const std::string& symbol = rightSide[j];
                     
-                    // 添加FIRST(symbol) - {epsilon}
+                    // 添加FIRST(symbol) - {ε}
                     for (const std::string& firstSymbol : first[symbol]) {
-                        if (firstSymbol != "epsilon" && first[leftSide].find(firstSymbol) == first[leftSide].end()) {
+                        if (firstSymbol != "ε" && first[leftSide].find(firstSymbol) == first[leftSide].end()) {
                             first[leftSide].insert(firstSymbol);
                             changed = true;
                         }
                     }
 
-                    // 如果symbol不包含epsilon，停止
-                    if (first[symbol].find("epsilon") == first[symbol].end()) {
+                    // 如果symbol不包含ε，停止
+                    if (first[symbol].find("ε") == first[symbol].end()) {
                         break;
                     }
 
-                    // 如果是最后一个符号且包含epsilon
+                    // 如果是最后一个符号且包含ε
                     if (j == rightSide.size() - 1) {
-                        if (first[leftSide].find("epsilon") == first[leftSide].end()) {
-                            first[leftSide].insert("epsilon");
+                        if (first[leftSide].find("ε") == first[leftSide].end()) {
+                            first[leftSide].insert("ε");
                             changed = true;
                         }
                     }
@@ -548,13 +602,13 @@ namespace SLR1Parser {
                                 const std::string& nextSymbol = rightSide[k];
                                 
                                 for (const std::string& firstSymbol : firstSets[nextSymbol]) {
-                                    if (firstSymbol != "epsilon" && follow[symbol].find(firstSymbol) == follow[symbol].end()) {
+                                    if (firstSymbol != "ε" && follow[symbol].find(firstSymbol) == follow[symbol].end()) {
                                         follow[symbol].insert(firstSymbol);
                                         changed = true;
                                     }
                                 }
 
-                                if (firstSets[nextSymbol].find("epsilon") == firstSets[nextSymbol].end()) {
+                                if (firstSets[nextSymbol].find("ε") == firstSets[nextSymbol].end()) {
                                     break;
                                 }
 
@@ -803,8 +857,13 @@ namespace SLR1Parser {
                 std::string leftSide = Grammar_SLR1::productionLeftSides[productionIndex];
                 std::vector<std::string> rightSide = Grammar_SLR1::productionRightSides[productionIndex];
 
-                // 弹出栈
-                for (int i = 0; i < rightSide.size(); i++) {
+                // 弹出栈 - 特殊处理epsilon产生式
+                int symbolsToReduce = rightSide.size();
+                if (rightSide.size() == 1 && Grammar_SLR1::isEpsilon(rightSide[0])) {
+                    symbolsToReduce = 0;  // epsilon产生式不弹出任何符号
+                }
+                
+                for (int i = 0; i < symbolsToReduce; i++) {
                     if (!stateStack.empty()) stateStack.pop_back();
                     if (!symbolStack.empty()) symbolStack.pop_back();
                 }
@@ -853,11 +912,18 @@ namespace SLR1Parser {
                 const std::vector<std::string>& rightSide = Grammar_SLR1::productionRightSides[item.productionIndex];
                 
                 dot << leftSide << " -> ";
-                for (int j = 0; j < rightSide.size(); ++j) {
-                    if (j == item.dotPosition) dot << ". ";
-                    dot << rightSide[j] << " ";
+                
+                // 特殊处理epsilon产生式：如果右部只有一个epsilon符号，则只显示点
+                if (rightSide.size() == 1 && Grammar_SLR1::isEpsilon(rightSide[0])) {
+                    dot << ".";  // epsilon产生式只显示点
+                } else {
+                    // 正常产生式的处理
+                    for (int j = 0; j < rightSide.size(); ++j) {
+                        if (j == item.dotPosition) dot << ". ";
+                        dot << rightSide[j] << " ";
+                    }
+                    if (item.dotPosition == rightSide.size()) dot << ". ";
                 }
-                if (item.dotPosition == rightSide.size()) dot << ". ";
                 dot << "\\n";
             }
             dot << "\"];" << std::endl;
@@ -869,7 +935,7 @@ namespace SLR1Parser {
         for (int stateIndex = 0; stateIndex < canonicalCollection.size(); stateIndex++) {
             // 处理终结符转换（shift 动作）
             for (const std::string& terminal : Grammar_SLR1::terminalSymbols) {
-                if (terminal == "#") continue;  // 跳过结束符
+                if (terminal == "#" || Grammar_SLR1::isEpsilon(terminal)) continue;  // 跳过结束符和epsilon
 
                 auto actionIter = actionTable[stateIndex].find(terminal);
                 if (actionIter != actionTable[stateIndex].end()) {
@@ -885,6 +951,7 @@ namespace SLR1Parser {
             // 处理非终结符转换（GOTO）
             for (const std::string& nonterminal : Grammar_SLR1::nonterminalSymbols) {
                 if (nonterminal.find("'") != std::string::npos) continue; // 跳过拓广开始符号
+                if (nonterminal == "epsilon") continue; // 确保跳过epsilon
                 
                 auto gotoIter = gotoTable[stateIndex].find(nonterminal);
                 if (gotoIter != gotoTable[stateIndex].end()) {
@@ -926,6 +993,18 @@ namespace SLR1Parser {
         }
     }
 
+    // 调试函数：检查GOTO表中是否有epsilon转移
+    void printGotoTableEpsilonCheck() {
+        std::cout << "Checking GOTO table for epsilon transitions:" << std::endl;
+        for (int i = 0; i < gotoTable.size(); ++i) {
+            for (const auto& entry : gotoTable[i]) {
+                if (entry.first == "epsilon" && entry.second != -1) {
+                    std::cout << "WARNING: Found epsilon transition in GOTO[" << i << "][epsilon] = " << entry.second << std::endl;
+                }
+            }
+        }
+    }
+
     void printAutomaton() {
         std::cout << "SLR1 Automaton States:" << std::endl;
         for (int i = 0; i < canonicalCollection.size(); ++i) {
@@ -933,11 +1012,17 @@ namespace SLR1Parser {
             for (const ItemSet_SLR1::LRItem& item : canonicalCollection[i]) {
                 std::cout << "  " << Grammar_SLR1::productionLeftSides[item.productionIndex] << " -> ";
                 const std::vector<std::string>& rightSide = Grammar_SLR1::productionRightSides[item.productionIndex];
-                for (int j = 0; j < rightSide.size(); ++j) {
-                    if (j == item.dotPosition) std::cout << ". ";
-                    std::cout << rightSide[j] << " ";
+                
+                // 特殊处理epsilon产生式
+                if (rightSide.size() == 1 && Grammar_SLR1::isEpsilon(rightSide[0])) {
+                    std::cout << ".";  // epsilon产生式只显示点，不显示epsilon符号
+                } else {
+                    for (int j = 0; j < rightSide.size(); ++j) {
+                        if (j == item.dotPosition) std::cout << ". ";
+                        std::cout << rightSide[j] << " ";
+                    }
+                    if (item.dotPosition == rightSide.size()) std::cout << ". ";
                 }
-                if (item.dotPosition == rightSide.size()) std::cout << ". ";
                 std::cout << std::endl;
             }
             std::cout << std::endl;

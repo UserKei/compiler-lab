@@ -238,13 +238,11 @@ const inputString = ref('')
 const activeTab = ref('steps')
 
 // 示例数据
-const exampleGrammar = `S' -> S
-S -> E
-E -> E + T | T
-T -> T * F | F
-F -> ( E ) | id`
+const exampleGrammar = `S -> AB
+A -> a | ε
+B -> b`
 
-const exampleInput = 'id + id * id'
+const exampleInput = 'ab'
 
 // 计算属性
 const canParse = computed(() => {
@@ -325,8 +323,19 @@ const getActionCellClass = (action: string) => {
 
 // 处理解析
 const handleParse = async () => {
+  if (!canParse.value) return
+
   try {
-    await store.parseSLR1(grammarInput.value, inputString.value)
+    // 智能处理输入字符串，在符号之间添加空格
+    let processedInput = inputString.value.trim()
+
+    // 在每个字符之间添加空格（除了已有空格的地方）
+    processedInput = processedInput.replace(/(.)/g, '$1 ').trim()
+
+    // 清理多余的空格
+    processedInput = processedInput.replace(/\s+/g, ' ')
+
+    await store.parseSLR1(grammarInput.value.trim(), processedInput)
   } catch (error) {
     console.error('SLR1 parsing failed:', error)
   }

@@ -147,6 +147,7 @@ curl -X POST http://localhost:8080/api/regex/match \\
     std::cout << "Available endpoints:\n";
     std::cout << "   GET  /api/health - Health check\n";
     std::cout << "   POST /api/lr0/parse - LR0 syntax analysis\n";
+    std::cout << "   POST /api/slr1/parse - SLR1 syntax analysis\n";
     std::cout << "   POST /api/regex/build - Build regex automata\n";
     std::cout << "   POST /api/regex/match - Match string with regex\n";
     std::cout << "   POST /api/grammar/upload - Upload grammar file\n";
