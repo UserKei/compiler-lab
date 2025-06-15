@@ -238,11 +238,12 @@ const inputString = ref('')
 const activeTab = ref('steps')
 
 // 示例数据
-const exampleGrammar = `S -> AB
-A -> a | ε
-B -> b`
+const exampleGrammar = `E -> E + T | T
+T -> T * F | F
+F -> ( E ) | i
+`
 
-const exampleInput = 'ab'
+const exampleInput = 'i + i * i'
 
 // 计算属性
 const canParse = computed(() => {
